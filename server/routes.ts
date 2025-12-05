@@ -5,6 +5,7 @@ import path from "path";
 import fs from "fs/promises";
 import { randomUUID } from "crypto";
 import * as XLSX from "xlsx";
+import { ExcelExporter } from "./src/reports/excelExporter.js";
 import Tesseract from "tesseract.js";
 import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
@@ -15,6 +16,11 @@ import { processOMRPage, extractTextRegion, preprocessForOCR } from "./omr";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+// Módulos organizados
+import { TRICalculator } from "./src/calculations/triCalculator.js";
+import { TCTCalculator } from "./src/calculations/tctCalculator.js";
+import { TRIProcessor } from "./src/processors/triProcessor.js";
+import { QuestionStatsProcessor } from "./src/processors/questionStatsProcessor.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -496,11 +502,14 @@ export async function registerRoutes(
 
   app.post("/api/export-excel", async (req: Request, res: Response) => {
     try {
-      const { students, answerKey, questionContents, statistics } = req.body as {
+      const { students, answerKey, questionContents, statistics, includeTRI, triScores, triScoresByArea } = req.body as {
         students: StudentData[];
         answerKey?: string[];
         questionContents?: Array<{ questionNumber: number; answer: string; content: string }>;
         statistics?: ExamStatistics;
+        includeTRI?: boolean;
+        triScores?: Record<string, number>; // Convertido de Map para objeto
+        triScoresByArea?: Record<string, Record<string, number>>; // Convertido de Map para objeto
       };
 
       if (!students || !Array.isArray(students)) {
@@ -508,115 +517,19 @@ export async function registerRoutes(
         return;
       }
 
-      const validatedStudents: StudentData[] = [];
-      for (const student of students) {
-        if (
-          typeof student.id === "string" &&
-          typeof student.studentNumber === "string" &&
-          typeof student.studentName === "string" &&
-          Array.isArray(student.answers) &&
-          typeof student.pageNumber === "number"
-        ) {
-          validatedStudents.push(student as StudentData);
-        }
-      }
+      // Converter objetos de volta para Maps se necessário
+      const triScoresMap = triScores ? new Map(Object.entries(triScores)) : undefined;
+      const triScoresByAreaMap = triScoresByArea ? new Map(Object.entries(triScoresByArea)) : undefined;
 
-      if (validatedStudents.length === 0) {
-        res.status(400).json({ error: "Nenhum dado de aluno válido fornecido" });
-        return;
-      }
-
-      const maxAnswers = Math.max(...validatedStudents.map((s) => s.answers?.length || 0));
-      const hasGrading = answerKey && answerKey.length > 0;
-
-      const worksheetData = validatedStudents.map((student, index) => {
-        const row: Record<string, string | number> = {
-          "#": index + 1,
-          "Número do Aluno": student.studentNumber || "",
-          "Nome": student.studentName || "",
-        };
-
-        if (hasGrading) {
-          row["Acertos"] = student.correctAnswers || 0;
-          row["Erros"] = student.wrongAnswers || 0;
-          row["Nota (%)"] = student.score || 0;
-        }
-
-        row["Confiança (%)"] = student.confidence !== undefined ? Math.round(student.confidence) : "N/A";
-        row["Página"] = student.pageNumber || 1;
-
-        for (let i = 0; i < maxAnswers; i++) {
-          row[`Q${i + 1}`] = student.answers?.[i] || "";
-        }
-
-        return row;
-      });
-
-      const worksheet = XLSX.utils.json_to_sheet(worksheetData);
-
-      const baseColWidths = [
-        { wch: 5 },
-        { wch: 18 },
-        { wch: 30 },
-      ];
-      
-      if (hasGrading) {
-        baseColWidths.push({ wch: 8 }, { wch: 8 }, { wch: 10 });
-      }
-      
-      baseColWidths.push({ wch: 14 });
-      baseColWidths.push({ wch: 8 });
-      baseColWidths.push(...Array(maxAnswers).fill({ wch: 5 }));
-      
-      worksheet["!cols"] = baseColWidths;
-
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Alunos");
-
-      if (hasGrading && answerKey) {
-        const keyData = questionContents && questionContents.length > 0
-          ? questionContents.map((qc) => ({
-              "Questão": qc.questionNumber || 0,
-              "Resposta Correta": qc.answer,
-              "Conteúdo": qc.content || "",
-            }))
-          : answerKey.map((answer, index) => ({
-              "Questão": index + 1,
-              "Resposta Correta": answer,
-              "Conteúdo": "",
-            }));
-        const keySheet = XLSX.utils.json_to_sheet(keyData);
-        keySheet["!cols"] = [{ wch: 10 }, { wch: 18 }, { wch: 30 }];
-        XLSX.utils.book_append_sheet(workbook, keySheet, "Gabarito");
-      }
-
-      if (statistics) {
-        const statsData = [
-          { "Estatística": "Total de Alunos", "Valor": statistics.totalStudents },
-          { "Estatística": "Média Geral (%)", "Valor": statistics.averageScore },
-          { "Estatística": "Maior Nota (%)", "Valor": statistics.highestScore },
-          { "Estatística": "Menor Nota (%)", "Valor": statistics.lowestScore },
-        ];
-        const statsSheet = XLSX.utils.json_to_sheet(statsData);
-        statsSheet["!cols"] = [{ wch: 25 }, { wch: 15 }];
-        XLSX.utils.book_append_sheet(workbook, statsSheet, "Estatísticas");
-
-        if (statistics.questionStats && statistics.questionStats.length > 0) {
-          const questionData = statistics.questionStats.map((stat) => ({
-            "Questão": stat.questionNumber,
-            "Acertos": stat.correctCount,
-            "Erros": stat.wrongCount,
-            "% Acertos": stat.correctPercentage,
-          }));
-          const questionSheet = XLSX.utils.json_to_sheet(questionData);
-          questionSheet["!cols"] = [{ wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }];
-          XLSX.utils.book_append_sheet(workbook, questionSheet, "Análise por Questão");
-        }
-      }
-
-      const excelBuffer = XLSX.write(workbook, {
-        type: "buffer",
-        bookType: "xlsx",
+      // Usar ExcelExporter com formatação rica
+      const excelBuffer = await ExcelExporter.generateExcel({
+        students,
+        answerKey,
+        questionContents,
+        statistics,
+        includeTRI,
+        triScores: triScoresMap,
+        triScoresByArea: triScoresByAreaMap,
       });
 
       res.setHeader(
@@ -1031,94 +944,17 @@ export async function registerRoutes(
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
-  // TRI Data Cache
-  let triDataCache: Array<{
-    area: string;
-    acertos: number;
-    min: number;
-    max: number;
-    media: number;
-    ano: number;
-  }> | null = null;
-
-  // Load TRI data from CSV
-  const loadTRIData = async () => {
-    if (triDataCache) return triDataCache;
-
-    try {
-      const triFilePath = join(__dirname, "..", "tri", "TRI ENEM DE 2009 A 2023 MIN MED E MAX.csv");
-      const csvContent = readFileSync(triFilePath, "utf-8");
-      const lines = csvContent.split("\n").filter(line => line.trim());
-      
-      if (lines.length < 2) {
-        throw new Error("CSV TRI vazio ou inválido");
-      }
-
-      const headers = lines[0].split(";").map(h => h.trim());
-      const areaIdx = headers.indexOf("area");
-      const acertosIdx = headers.indexOf("acertos");
-      const minIdx = headers.indexOf("min");
-      const maxIdx = headers.indexOf("max");
-      const mediaIdx = headers.indexOf("media");
-      const anoIdx = headers.indexOf("ano");
-
-      if (areaIdx === -1 || acertosIdx === -1 || mediaIdx === -1 || anoIdx === -1) {
-        throw new Error("Colunas obrigatórias não encontradas no CSV TRI");
-      }
-
-      triDataCache = [];
-
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-
-        const values = line.split(";").map(v => v.trim());
-        const area = values[areaIdx];
-        const acertos = parseInt(values[acertosIdx], 10);
-        const min = parseFloat(values[minIdx]?.replace(",", ".") || "0");
-        const max = parseFloat(values[maxIdx]?.replace(",", ".") || "0");
-        const media = parseFloat(values[mediaIdx]?.replace(",", ".") || "0");
-        const ano = parseInt(values[anoIdx], 10);
-
-        if (area && !isNaN(acertos) && !isNaN(media) && !isNaN(ano)) {
-          triDataCache.push({ area, acertos, min, max, media, ano });
-        }
-      }
-
-      return triDataCache;
-    } catch (error) {
-      console.error("[TRI] Erro ao carregar dados TRI:", error);
-      throw error;
-    }
-  };
-
-  // Função para obter peso de coerência baseado na porcentagem
-  const getCategoriaPeso = (porcentagem: number): number => {
-    const p = porcentagem * 100; // converter 0.2 para 20
-    if (p >= 80) return 5; // Muito Fácil
-    if (p >= 60) return 4; // Fácil
-    if (p >= 40) return 3; // Média
-    if (p >= 20) return 2; // Difícil
-    return 1; // Muito Difícil (0 a 19%)
-  };
-
-  // Função para calcular desvio padrão
-  const calcularDesvioPadrao = (valores: number[]): number => {
-    if (valores.length === 0) return 0;
-    const media = valores.reduce((a, b) => a + b, 0) / valores.length;
-    const variancia = valores.reduce((sum, val) => sum + Math.pow(val - media, 2), 0) / valores.length;
-    return Math.sqrt(variancia);
-  };
-
-  // Endpoint to get TRI estimate with coherence
+  // Endpoint to get TRI estimate with coherence (Two-Pass Algorithm)
   app.post("/api/calculate-tri", async (req: Request, res: Response) => {
     try {
-      const { students, area, ano, questionStats, answerKey } = req.body as {
+      const { students, area, ano, questionStats, answerKey, startQuestion, endQuestion } = req.body as {
         students: StudentData[];
         area: string; // CH, CN, MT, LC, etc
         ano: number; // Ano da prova
-        questionStats?: Array<{ questionNumber: number; correctPercentage: number }>; // Estatísticas das questões
+        questionStats?: Array<{ questionNumber: number; correctPercentage: number }>; // Estatísticas das questões (opcional, será calculado se não fornecido)
         answerKey?: string[]; // Gabarito para verificar acertos
+        startQuestion?: number; // Questão inicial (1-indexed, para áreas específicas)
+        endQuestion?: number; // Questão final (1-indexed, para áreas específicas)
       };
 
       if (!students || !Array.isArray(students) || students.length === 0) {
@@ -1131,162 +967,72 @@ export async function registerRoutes(
         return;
       }
 
-      const triData = await loadTRIData();
-      
-      // Criar mapa de estatísticas das questões (porcentagem de acerto)
-      const statsMap = new Map<number, number>();
-      if (questionStats && questionStats.length > 0) {
-        questionStats.forEach(stat => {
-          statsMap.set(stat.questionNumber, stat.correctPercentage / 100); // Converter para 0.0-1.0
-        });
+      if (!answerKey || answerKey.length === 0) {
+        res.status(400).json({ error: "Gabarito não fornecido" });
+        return;
       }
 
-      // Verificar se há variação suficiente nas questões
-      const porcentagens = Array.from(statsMap.values());
-      const desvioPadrao = calcularDesvioPadrao(porcentagens);
-      const usarCoerencia = desvioPadrao >= 0.03 && statsMap.size > 0;
-
-      console.log(`[TRI BACKEND] Processando ${students.length} alunos para área ${area}, ano ${ano}`);
-      console.log(`[TRI BACKEND] Total de entradas no CSV: ${triData.length}`);
-      console.log(`[TRI BACKEND] Exemplos de entradas no CSV (área ${area}, ano ${ano}):`, 
-        triData.filter(e => e.area === area && e.ano === ano).slice(0, 5));
-
-      const results = students.map(student => {
-        // Calcular correctAnswers se não estiver presente
-        let correctAnswers = student.correctAnswers;
-        if (correctAnswers === undefined || correctAnswers === null) {
-          // Calcular baseado nas respostas e gabarito
-          if (answerKey && student.answers) {
-            correctAnswers = student.answers.reduce((count, answer, idx) => {
-              if (answer && answerKey[idx] && answer.toUpperCase() === answerKey[idx].toUpperCase()) {
-                return count + 1;
-              }
-              return count;
-            }, 0);
-            console.log(`[TRI BACKEND] Calculado correctAnswers=${correctAnswers} para studentId=${student.id}`);
-          } else {
-            correctAnswers = 0;
-            console.warn(`[TRI BACKEND] Não foi possível calcular correctAnswers para studentId=${student.id}`);
-          }
-        }
+      // Two-Pass Algorithm:
+      // PASSO 1: Se questionStats não foi fornecido, calcular estatísticas da prova
+      let finalQuestionStats = questionStats;
+      if (!finalQuestionStats || finalQuestionStats.length === 0) {
+        console.log("[TRI BACKEND] PASSO 1: Calculando estatísticas da prova...");
         
-        // Buscar dados históricos do CSV
-        let triEntry = triData.find(
-          entry => entry.area === area && entry.acertos === correctAnswers && entry.ano === ano
+        const start = startQuestion || 1;
+        const end = endQuestion || answerKey.length;
+        
+        finalQuestionStats = QuestionStatsProcessor.calculateQuestionStats(
+          students,
+          answerKey,
+          start,
+          end
         );
 
-        // Se não encontrou para o ano específico, tentar o ano mais recente disponível
-        if (!triEntry) {
-          const anosDisponiveis = [...new Set(triData.filter(e => e.area === area).map(e => e.ano))].sort((a, b) => b - a);
-          console.log(`[TRI BACKEND] Não encontrado para ano ${ano}, tentando anos disponíveis:`, anosDisponiveis);
-          
-          for (const anoAlternativo of anosDisponiveis) {
-            triEntry = triData.find(
-              entry => entry.area === area && entry.acertos === correctAnswers && entry.ano === anoAlternativo
-            );
-            if (triEntry) {
-              console.log(`[TRI BACKEND] Usando dados do ano ${anoAlternativo} para área ${area}, acertos ${correctAnswers}`);
-              break;
-            }
-          }
+        // Se foi especificado um range, ajustar questionNumber para ser relativo
+        if (startQuestion && endQuestion) {
+          finalQuestionStats = finalQuestionStats.map(stat => ({
+            questionNumber: stat.questionNumber - startQuestion + 1,
+            correctPercentage: stat.correctPercentage,
+          }));
         }
+      }
 
-        if (!triEntry) {
-          console.log(`[TRI BACKEND] Dados não encontrados no CSV para: área=${area}, acertos=${correctAnswers}, ano=${ano}, studentId=${student.id}`);
-          // Tentar encontrar dados próximos para debug
-          const similarEntries = triData.filter(
-            e => e.area === area && Math.abs(e.acertos - correctAnswers) <= 2
-          );
-          if (similarEntries.length > 0) {
-            console.log(`[TRI BACKEND] Entradas similares encontradas:`, similarEntries.slice(0, 3).map(e => `ano=${e.ano}, acertos=${e.acertos}`));
-          }
-          return {
-            studentId: student.id,
-            correctAnswers,
-            triScore: null,
-            triMin: null,
-            triMax: null,
-          };
-        }
-        
-        console.log(`[TRI BACKEND] Dados encontrados para studentId=${student.id}, acertos=${correctAnswers}: min=${triEntry.min}, max=${triEntry.max}, media=${triEntry.media}`);
-        
-        console.log(`[TRI BACKEND] Dados encontrados para studentId=${student.id}, acertos=${correctAnswers}: min=${triEntry.min}, max=${triEntry.max}, media=${triEntry.media}`);
+      // PASSO 2: Calcular TRI individual usando as estatísticas
+      console.log("[TRI BACKEND] PASSO 2: Calculando TRI individual para cada aluno...");
+      
+      // Se foi especificado um range, usar apenas as respostas e gabarito daquela área
+      let studentsForCalculation = students;
+      let answerKeyForCalculation = answerKey;
+      
+      if (startQuestion && endQuestion) {
+        studentsForCalculation = students.map(student => ({
+          ...student,
+          answers: student.answers.slice(startQuestion - 1, endQuestion),
+        }));
+        answerKeyForCalculation = answerKey.slice(startQuestion - 1, endQuestion);
+      }
 
-        // Se não há variação suficiente ou não há estatísticas, usar média
-        if (!usarCoerencia || correctAnswers === 0 || correctAnswers === 45) {
-          return {
-            studentId: student.id,
-            correctAnswers,
-            triScore: triEntry.media,
-            triMin: triEntry.min,
-            triMax: triEntry.max,
-          };
-        }
+      const { results, usarCoerencia } = await TRICalculator.calculate(
+        studentsForCalculation,
+        area,
+        ano,
+        finalQuestionStats,
+        answerKeyForCalculation
+      );
 
-        // Calcular coerência
-        // Criar lista de questões com peso
-        const questoesDetalhadas: Array<{
-          id: number;
-          pct: number;
-          peso: number;
-          acertou: boolean;
-        }> = [];
+      // Ajustar studentId para corresponder aos IDs originais
+      const adjustedResults = results.map((result, index) => ({
+        ...result,
+        studentId: students[index].id,
+      }));
 
-        for (let i = 0; i < student.answers.length; i++) {
-          const questionNum = i + 1;
-          const pct = statsMap.get(questionNum) || 0;
-          const peso = getCategoriaPeso(pct);
-          const studentAnswer = student.answers[i]?.toUpperCase() || "";
-          const correctAnswer = (answerKey?.[i] || "").toUpperCase();
-          const acertou = studentAnswer !== "" && studentAnswer === correctAnswer;
-          
-          questoesDetalhadas.push({
-            id: questionNum,
-            pct,
-            peso,
-            acertou,
-          });
-        }
-
-        // Ordenar da mais fácil (maior pct) para mais difícil
-        const questoesOrdenadas = [...questoesDetalhadas].sort((a, b) => b.pct - a.pct);
-
-        // Score ideal: soma dos pesos das N questões mais fáceis
-        const scoreIdeal = questoesOrdenadas
-          .slice(0, correctAnswers)
-          .reduce((sum, q) => sum + q.peso, 0);
-
-        // Score real: soma dos pesos das questões que o aluno realmente acertou
-        const scoreReal = questoesDetalhadas
-          .filter(q => q.acertou)
-          .reduce((sum, q) => sum + q.peso, 0);
-
-        // Calcular índice de coerência (0.0 a 1.0)
-        const indiceCoerencia = scoreIdeal > 0 ? scoreReal / scoreIdeal : 0;
-        const indiceCoerenciaLimitado = Math.max(0.0, Math.min(1.0, indiceCoerencia));
-
-        // Interpolar entre min e max baseado na coerência
-        const rangeNota = triEntry.max - triEntry.min;
-        const notaFinal = triEntry.min + (rangeNota * indiceCoerenciaLimitado);
-
-        return {
-          studentId: student.id,
-          correctAnswers,
-          triScore: notaFinal,
-          triMin: triEntry.min,
-          triMax: triEntry.max,
-          indiceCoerencia: indiceCoerenciaLimitado,
-        };
-      });
-
-      const validResults = results.filter(r => r.triScore !== null && r.triScore !== undefined);
-      console.log(`[TRI BACKEND] Resultados finais: ${validResults.length} válidos de ${results.length} total`);
+      const validResults = adjustedResults.filter(r => r.triScore !== null && r.triScore !== undefined);
+      console.log(`[TRI BACKEND] Resultados finais: ${validResults.length} válidos de ${adjustedResults.length} total`);
       if (validResults.length === 0) {
         console.error(`[TRI BACKEND] NENHUM RESULTADO VÁLIDO! Verifique se o CSV tem dados para área ${area}`);
       }
       
-      res.json({ results, usarCoerencia });
+      res.json({ results: adjustedResults, usarCoerencia });
     } catch (error) {
       console.error("[TRI BACKEND] Erro ao calcular TRI:", error);
       res.status(500).json({

@@ -116,12 +116,14 @@ gabaritosxtri/
 
 ```bash
 # Clone o repositório
-git clone https://github.com/seu-usuario/gabaritosxtri.git
+git clone https://github.com/xtribr/gabaritosxtri.git
 cd gabaritosxtri
 
 # Instale as dependências
 npm install
 ```
+
+**Nota:** O arquivo `package.json` contém todas as dependências necessárias. O Node.js usa `package.json` em vez de `requirements.txt` (Python). Para instalar todas as dependências, basta executar `npm install`.
 
 ### Desenvolvimento
 
@@ -200,7 +202,9 @@ Os templates podem ser configurados em `shared/schema.ts`. O sistema inclui temp
 - Provas escolares (bimestral, simulado)
 - Personalizado (configurável)
 
-## 📝 Formato do CSV
+## 📝 Formato dos Arquivos de Entrada
+
+### CSV para Geração de Gabaritos Personalizados
 
 Para gerar gabaritos personalizados, o CSV deve ter o formato:
 
@@ -210,7 +214,64 @@ João Silva;3º A;12345
 Maria Santos;3º B;12346
 ```
 
-Ou com vírgula como separador. O sistema detecta automaticamente o separador.
+**Colunas Obrigatórias:**
+- `NOME` (ou `NOME DO ALUNO`, `NOME_COMPLETO`): Nome completo do aluno
+- `TURMA` (ou `SALA`, `CLASSE`): Turma/sala do aluno
+- `MATRICULA` (ou `MATRÍCULA`, `ID`, `CODIGO`): Matrícula ou código único do aluno
+
+**Observações:**
+- O sistema detecta automaticamente o separador (`;` ou `,`)
+- A primeira linha pode ser cabeçalho ou dados (o sistema detecta automaticamente)
+- Linhas vazias são ignoradas
+- O sistema aceita variações nos nomes das colunas (case-insensitive)
+
+### CSV para Importação de Gabarito Oficial
+
+Para importar o gabarito oficial via Excel/CSV, o arquivo deve ter as seguintes colunas:
+
+```csv
+NR QUESTÃO;GABARITO;CONTEÚDO
+1;A;Matemática - Álgebra
+2;B;Matemática - Geometria
+3;C;Linguagens - Literatura
+```
+
+**Colunas Obrigatórias:**
+- `NR QUESTÃO` (ou `QUESTÃO`, `Q`, `NUMERO`, `NÚMERO`): Número da questão (1, 2, 3...)
+- `GABARITO` (ou `RESPOSTA`, `LETRA`, `GABARITO OFICIAL`): Letra da resposta correta (A, B, C, D, E)
+- `CONTEÚDO` (ou `CONTEUDO`, `ASSUNTO`, `MATÉRIA`): Conteúdo/assunto da questão (opcional mas recomendado)
+
+**Observações:**
+- O sistema detecta automaticamente o separador (`;` ou `,`)
+- A primeira linha deve conter os cabeçalhos
+- As questões devem estar numeradas sequencialmente
+- O conteúdo é opcional, mas recomendado para análises estatísticas
+
+### CSV de Dados TRI Históricos
+
+O sistema utiliza um arquivo CSV com dados históricos de TRI do ENEM (2009-2023) localizado em `tri/TRI ENEM DE 2009 A 2023 MIN MED E MAX.csv`.
+
+**Formato:**
+```csv
+area;acertos;min;max;media;ano
+CH;0;300,0;300;300;2009
+CH;1;300,1;337,3;313,25;2009
+```
+
+**Colunas:**
+- `area`: Área do conhecimento (CH, CN, MT, LC)
+- `acertos`: Número de acertos (0-45)
+- `min`: Nota TRI mínima histórica
+- `max`: Nota TRI máxima histórica
+- `media`: Nota TRI média histórica
+- `ano`: Ano da prova (2009-2023)
+
+**⚠️ IMPORTANTE - Segurança e LGPD:**
+- **NUNCA** commite arquivos CSV ou Excel com dados reais de alunos no repositório
+- O arquivo `.gitignore` está configurado para ignorar `*.csv` e `*.xlsx`
+- Dados de alunos são informações sensíveis protegidas pela LGPD
+- Use apenas dados de exemplo ou anonimizados para testes
+- **Exceção**: O arquivo `tri/TRI ENEM DE 2009 A 2023 MIN MED E MAX.csv` contém apenas dados históricos públicos do ENEM (não dados de alunos) e é necessário para o funcionamento do sistema
 
 ## 🐛 Troubleshooting
 

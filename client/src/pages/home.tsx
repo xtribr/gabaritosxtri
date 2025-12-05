@@ -602,6 +602,9 @@ export default function Home() {
           answerKey: answerKey.length > 0 ? answerKey : undefined,
           questionContents: questionContents.length > 0 ? questionContents : undefined,
           statistics: statistics || undefined,
+          includeTRI: triScores.size > 0,
+          triScores: triScores.size > 0 ? Object.fromEntries(triScores) : undefined,
+          triScoresByArea: triScoresByArea.size > 0 ? Object.fromEntries(triScoresByArea) : undefined,
         }),
       });
 

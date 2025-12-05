@@ -1,4 +1,70 @@
+# Sistema Operacional
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Dependências
 node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json.bak
+
+# Build
 dist/
+build/
+*.tsbuildinfo
+
+# Logs
 *.log
+logs/
+*.log.*
+
+# Arquivos sensíveis (LGPD - Lei Geral de Proteção de Dados)
+# NUNCA commitar dados de alunos reais
+*.csv
+*.xlsx
+*.xls
+*.xlsm
+*.ods
+data/
+uploads/
+exports/
+
+# Exceção: Arquivo de dados históricos TRI (dados públicos do ENEM, não contém dados de alunos)
+!tri/TRI ENEM DE 2009 A 2023 MIN MED E MAX.csv
+
+# Arquivos temporários
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.cache/
+
+# Ambiente
+.env
+.env.local
+.env.*.local
+.env.production
+
+# IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+
+# Testes
+coverage/
+.nyc_output/
+*.test.js.snap
+
+# Outros
+*.zip
+*.tar.gz
+*.rar
