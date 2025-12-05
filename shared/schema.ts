@@ -12,6 +12,7 @@ export const studentDataSchema = z.object({
   score: z.number().optional(),
   correctAnswers: z.number().optional(),
   wrongAnswers: z.number().optional(),
+  areaScores: z.record(z.string(), z.number()).optional(), // Notas por área (LC, CH, CN, MT)
 });
 
 export const questionContentSchema = z.object({
@@ -122,7 +123,6 @@ export const examStatisticsSchema = z.object({
   averageScore: z.number(),
   highestScore: z.number(),
   lowestScore: z.number(),
-  passingRate: z.number(),
   questionStats: z.array(z.object({
     questionNumber: z.number(),
     correctCount: z.number(),
@@ -145,12 +145,15 @@ export const examStatisticsSchema = z.object({
     erros: z.number(),
     nota: z.number(),
     triScore: z.number().nullable().optional(),
+    lc: z.number().nullable().optional(), // Nota Linguagens
+    ch: z.number().nullable().optional(), // Nota Humanas
+    cn: z.number().nullable().optional(), // Nota Natureza
+    mt: z.number().nullable().optional(), // Nota Matemática
   })).optional(),
   turmaStats: z.array(z.object({
     turma: z.string(),
     totalAlunos: z.number(),
     mediaNota: z.number(),
-    taxaAprovacao: z.number(),
     totalAcertos: z.number(),
     totalErros: z.number(),
   })).optional(),

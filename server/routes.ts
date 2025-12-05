@@ -596,7 +596,6 @@ export async function registerRoutes(
           { "Estatística": "Média Geral (%)", "Valor": statistics.averageScore },
           { "Estatística": "Maior Nota (%)", "Valor": statistics.highestScore },
           { "Estatística": "Menor Nota (%)", "Valor": statistics.lowestScore },
-          { "Estatística": "Taxa de Aprovação (%)", "Valor": statistics.passingRate },
         ];
         const statsSheet = XLSX.utils.json_to_sheet(statsData);
         statsSheet["!cols"] = [{ wch: 25 }, { wch: 15 }];
@@ -1147,15 +1146,60 @@ export async function registerRoutes(
       const desvioPadrao = calcularDesvioPadrao(porcentagens);
       const usarCoerencia = desvioPadrao >= 0.03 && statsMap.size > 0;
 
+      console.log(`[TRI BACKEND] Processando ${students.length} alunos para área ${area}, ano ${ano}`);
+      console.log(`[TRI BACKEND] Total de entradas no CSV: ${triData.length}`);
+      console.log(`[TRI BACKEND] Exemplos de entradas no CSV (área ${area}, ano ${ano}):`, 
+        triData.filter(e => e.area === area && e.ano === ano).slice(0, 5));
+
       const results = students.map(student => {
-        const correctAnswers = student.correctAnswers || 0;
+        // Calcular correctAnswers se não estiver presente
+        let correctAnswers = student.correctAnswers;
+        if (correctAnswers === undefined || correctAnswers === null) {
+          // Calcular baseado nas respostas e gabarito
+          if (answerKey && student.answers) {
+            correctAnswers = student.answers.reduce((count, answer, idx) => {
+              if (answer && answerKey[idx] && answer.toUpperCase() === answerKey[idx].toUpperCase()) {
+                return count + 1;
+              }
+              return count;
+            }, 0);
+            console.log(`[TRI BACKEND] Calculado correctAnswers=${correctAnswers} para studentId=${student.id}`);
+          } else {
+            correctAnswers = 0;
+            console.warn(`[TRI BACKEND] Não foi possível calcular correctAnswers para studentId=${student.id}`);
+          }
+        }
         
         // Buscar dados históricos do CSV
-        const triEntry = triData.find(
+        let triEntry = triData.find(
           entry => entry.area === area && entry.acertos === correctAnswers && entry.ano === ano
         );
 
+        // Se não encontrou para o ano específico, tentar o ano mais recente disponível
         if (!triEntry) {
+          const anosDisponiveis = [...new Set(triData.filter(e => e.area === area).map(e => e.ano))].sort((a, b) => b - a);
+          console.log(`[TRI BACKEND] Não encontrado para ano ${ano}, tentando anos disponíveis:`, anosDisponiveis);
+          
+          for (const anoAlternativo of anosDisponiveis) {
+            triEntry = triData.find(
+              entry => entry.area === area && entry.acertos === correctAnswers && entry.ano === anoAlternativo
+            );
+            if (triEntry) {
+              console.log(`[TRI BACKEND] Usando dados do ano ${anoAlternativo} para área ${area}, acertos ${correctAnswers}`);
+              break;
+            }
+          }
+        }
+
+        if (!triEntry) {
+          console.log(`[TRI BACKEND] Dados não encontrados no CSV para: área=${area}, acertos=${correctAnswers}, ano=${ano}, studentId=${student.id}`);
+          // Tentar encontrar dados próximos para debug
+          const similarEntries = triData.filter(
+            e => e.area === area && Math.abs(e.acertos - correctAnswers) <= 2
+          );
+          if (similarEntries.length > 0) {
+            console.log(`[TRI BACKEND] Entradas similares encontradas:`, similarEntries.slice(0, 3).map(e => `ano=${e.ano}, acertos=${e.acertos}`));
+          }
           return {
             studentId: student.id,
             correctAnswers,
@@ -1164,6 +1208,10 @@ export async function registerRoutes(
             triMax: null,
           };
         }
+        
+        console.log(`[TRI BACKEND] Dados encontrados para studentId=${student.id}, acertos=${correctAnswers}: min=${triEntry.min}, max=${triEntry.max}, media=${triEntry.media}`);
+        
+        console.log(`[TRI BACKEND] Dados encontrados para studentId=${student.id}, acertos=${correctAnswers}: min=${triEntry.min}, max=${triEntry.max}, media=${triEntry.media}`);
 
         // Se não há variação suficiente ou não há estatísticas, usar média
         if (!usarCoerencia || correctAnswers === 0 || correctAnswers === 45) {
@@ -1232,9 +1280,15 @@ export async function registerRoutes(
         };
       });
 
+      const validResults = results.filter(r => r.triScore !== null && r.triScore !== undefined);
+      console.log(`[TRI BACKEND] Resultados finais: ${validResults.length} válidos de ${results.length} total`);
+      if (validResults.length === 0) {
+        console.error(`[TRI BACKEND] NENHUM RESULTADO VÁLIDO! Verifique se o CSV tem dados para área ${area}`);
+      }
+      
       res.json({ results, usarCoerencia });
     } catch (error) {
-      console.error("[TRI] Erro ao calcular TRI:", error);
+      console.error("[TRI BACKEND] Erro ao calcular TRI:", error);
       res.status(500).json({
         error: "Erro ao calcular notas TRI",
         details: error instanceof Error ? error.message : "Erro desconhecido",

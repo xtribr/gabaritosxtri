@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { Upload, FileText, Download, Trash2, RefreshCw, CheckCircle, AlertCircle, Loader2, X, FileSpreadsheet, ClipboardList, Calculator, BarChart3, Plus, Minus, Info, HelpCircle, Users, FileUp, Eye, Moon, Sun } from "lucide-react";
 import * as XLSX from "xlsx";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, ScatterChart, Scatter, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, LineChart, Line } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -89,7 +89,8 @@ export default function Home() {
   const [answerKeyDialogOpen, setAnswerKeyDialogOpen] = useState(false);
   const [numQuestions, setNumQuestions] = useState<number>(45);
   const [triScores, setTriScores] = useState<Map<string, number>>(new Map()); // Map<studentId, triScore>
-  const [activeTab, setActiveTab] = useState<string>("students");
+  const [triScoresCount, setTriScoresCount] = useState<number>(0); // Contador para forçar atualização do React
+  const [mainActiveTab, setMainActiveTab] = useState<string>("alunos"); // Aba principal: alunos, gabarito, tri, tct, conteudos
   
   const [selectedTemplateIndex, setSelectedTemplateIndex] = useState<number>(6);
   const [customValidAnswers, setCustomValidAnswers] = useState<string>("A,B,C,D,E");
@@ -163,8 +164,6 @@ export default function Home() {
     const averageScore = scores.reduce((a, b) => a + b, 0) / scores.length;
     const highestScore = Math.max(...scores);
     const lowestScore = Math.min(...scores);
-    const passingRate = (scores.filter(s => s >= passingScore).length / scores.length) * 100;
-    
     const questionStats = answerKey.map((_, qIndex) => {
       let correctCount = 0;
       let wrongCount = 0;
@@ -231,14 +230,23 @@ export default function Home() {
       const triScore = triScores.get(student.id);
       // TRI está em escala 0-1000, manter o valor original com 1 casa decimal
       const triScoreFormatted = triScore !== undefined ? parseFloat(triScore.toFixed(1)) : null;
+      // Nota TCT: score está em porcentagem (0-100), converter para 0,0 a 10,0
+      // Cada área tem nota individual de 0,0 a 10,0, e a nota final é a média (também 0,0 a 10,0)
+      const notaTCT = student.score ? parseFloat((student.score / 10).toFixed(1)) : 0;
+      // Notas por área (LC, CH, CN, MT)
+      const areaScores = student.areaScores || {};
       return {
         matricula: student.studentNumber,
         nome: student.studentName,
         turma: extractTurmaFromStudent(student),
         acertos: student.correctAnswers || 0,
         erros: student.wrongAnswers || 0,
-        nota: student.score || 0,
+        nota: notaTCT, // Nota TCT de 0,0 a 10,0 (média)
         triScore: triScoreFormatted,
+        lc: areaScores.LC !== undefined ? parseFloat(areaScores.LC.toFixed(1)) : null,
+        ch: areaScores.CH !== undefined ? parseFloat(areaScores.CH.toFixed(1)) : null,
+        cn: areaScores.CN !== undefined ? parseFloat(areaScores.CN.toFixed(1)) : null,
+        mt: areaScores.MT !== undefined ? parseFloat(areaScores.MT.toFixed(1)) : null,
       };
     });
     
@@ -262,15 +270,10 @@ export default function Home() {
       const mediaNota = data.alunos.length > 0
         ? data.alunos.reduce((sum, s) => sum + s.nota, 0) / data.alunos.length
         : 0;
-      const taxaAprovacao = data.alunos.length > 0
-        ? (data.alunos.filter(s => s.nota >= passingScore).length / data.alunos.length) * 100
-        : 0;
-      
       return {
         turma,
         totalAlunos,
         mediaNota: Math.round(mediaNota * 10) / 10,
-        taxaAprovacao: Math.round(taxaAprovacao * 10) / 10,
         totalAcertos: data.totalAcertos,
         totalErros: data.totalErros,
       };
@@ -281,7 +284,6 @@ export default function Home() {
       averageScore: Math.round(averageScore * 10) / 10,
       highestScore,
       lowestScore,
-      passingRate: Math.round(passingRate * 10) / 10,
       questionStats,
       contentStats: contentStats.length > 0 ? contentStats : undefined,
       studentStats: studentStats.length > 0 ? studentStats : undefined,
@@ -637,8 +639,17 @@ export default function Home() {
     setErrorMessage("");
     setAnswerKey([]);
     setQuestionContents([]);
-    setActiveTab("students");
+    setTriScores(new Map());
+    setTriScoresCount(0);
+    setMainActiveTab("alunos");
   };
+
+  // Monitorar mudanças no triScoresCount para garantir que a aba TRI seja habilitada
+  useEffect(() => {
+    if (triScoresCount > 0) {
+      console.log("[TRI] useEffect: triScoresCount mudou para", triScoresCount, "Map size:", triScores.size);
+    }
+  }, [triScoresCount, triScores]);
 
   const processSingleFile = async (queuedFile: QueuedFile): Promise<StudentData[]> => {
     const formData = new FormData();
@@ -780,16 +791,20 @@ export default function Home() {
   // Função para detectar áreas baseado no template
   const getAreasByTemplate = (templateName: string, numQuestions: number): Array<{ area: string; start: number; end: number }> => {
     if (templateName === "ENEM - Dia 1") {
+      // Dia 1: questões 1-90, LC (1-45) e CH (46-90)
       return [
         { area: "LC", start: 1, end: 45 },   // Linguagens e Códigos
         { area: "CH", start: 46, end: 90 },  // Ciências Humanas
       ];
     } else if (templateName === "ENEM - Dia 2") {
+      // Dia 2: questões 1-90, CN (1-45) e MT (46-90)
+      // IMPORTANTE: As questões do Dia 2 são numeradas de 1 a 90, não 91-180
       return [
-        { area: "CN", start: 91, end: 135 }, // Ciências da Natureza
-        { area: "MT", start: 136, end: 180 }, // Matemática
+        { area: "CN", start: 1, end: 45 }, // Ciências da Natureza (primeiras 45 questões)
+        { area: "MT", start: 46, end: 90 }, // Matemática (últimas 45 questões)
       ];
     } else if (templateName === "ENEM") {
+      // ENEM completo: 180 questões
       return [
         { area: "LC", start: 1, end: 45 },
         { area: "CH", start: 46, end: 90 },
@@ -801,8 +816,13 @@ export default function Home() {
   };
 
   // Função para calcular TRI automaticamente para todas as áreas
-  const calculateTRIForAllAreas = async (areas: Array<{ area: string; start: number; end: number }>, ano: number = 2023) => {
-    if (studentsWithScores.length === 0 || answerKey.length === 0) return;
+  const calculateTRIForAllAreas = async (areas: Array<{ area: string; start: number; end: number }>, ano: number = 2023): Promise<Map<string, number>> => {
+    if (studentsWithScores.length === 0 || answerKey.length === 0) {
+      console.error("[TRI] Erro: studentsWithScores.length =", studentsWithScores.length, "answerKey.length =", answerKey.length);
+      return new Map<string, number>(); // Retornar Map vazio em vez de undefined
+    }
+
+    console.log("[TRI] Iniciando cálculo para", studentsWithScores.length, "alunos");
 
     // Calcular estatísticas das questões manualmente
     const questionStatsForTRI: Array<{ questionNumber: number; correctPercentage: number }> = [];
@@ -839,12 +859,20 @@ export default function Home() {
             }
           });
 
-          return {
+          const studentForArea = {
             ...student,
+            id: student.id, // GARANTIR que o ID está presente
             answers: answersForArea,
             correctAnswers: correctCount,
           };
+          
+          console.log(`[TRI] Área ${area}: Preparando aluno ID=${student.id}, correctAnswers=${correctCount}, answers.length=${answersForArea.length}`);
+          
+          return studentForArea;
         });
+
+        console.log(`[TRI] Área ${area}: ${studentsForArea.length} alunos preparados`);
+        console.log(`[TRI] Área ${area}: IDs enviados ao backend:`, studentsForArea.map(s => ({ id: s.id, correctAnswers: s.correctAnswers })));
 
         const questionStatsForArea = questionStatsForTRI.filter(stat => 
           stat.questionNumber >= start && stat.questionNumber <= end
@@ -870,15 +898,46 @@ export default function Home() {
         });
 
         if (response.ok) {
-          const { results } = await response.json();
+          const { results, usarCoerencia } = await response.json();
+          console.log(`[TRI] Área ${area}: Backend retornou ${results.length} resultados, usarCoerencia=${usarCoerencia}`);
+          console.log(`[TRI] Área ${area}: IDs retornados pelo backend:`, results.map((r: any) => ({ studentId: r.studentId, triScore: r.triScore, correctAnswers: r.correctAnswers })));
+          
+          // Verificar correspondência de IDs
+          const idsEnviados = new Set(studentsForArea.map(s => s.id));
+          const idsRetornados = new Set(results.map((r: any) => String(r.studentId || "")));
+          const idsNaoEncontrados = Array.from(idsEnviados).filter(id => !idsRetornados.has(id));
+          const idsExtras = Array.from(idsRetornados).filter(id => !idsEnviados.has(String(id)));
+          
+          if (idsNaoEncontrados.length > 0) {
+            console.error(`[TRI] Área ${area}: IDs enviados mas não retornados:`, idsNaoEncontrados);
+          }
+          if (idsExtras.length > 0) {
+            console.error(`[TRI] Área ${area}: IDs retornados mas não enviados:`, idsExtras);
+          }
+          
+          let validResults = 0;
+          let nullResults = 0;
           results.forEach((result: any) => {
-            if (result.triScore !== null) {
+            console.log(`[TRI] Área ${area}: Processando resultado - studentId=${result.studentId}, triScore=${result.triScore}, correctAnswers=${result.correctAnswers}`);
+            
+            if (result.triScore !== null && result.triScore !== undefined) {
+              validResults++;
               const currentData = triScoresMap.get(result.studentId) || { sum: 0, count: 0 };
               currentData.sum += result.triScore;
               currentData.count += 1;
               triScoresMap.set(result.studentId, currentData);
+              console.log(`[TRI] Área ${area}: ✅ studentId ${result.studentId} adicionado ao Map com triScore=${result.triScore.toFixed(1)}`);
+              console.log(`[TRI] Área ${area}: Map agora tem ${triScoresMap.size} entradas`);
+            } else {
+              nullResults++;
+              console.warn(`[TRI] Área ${area}: ❌ studentId ${result.studentId} recebeu triScore=null (acertos=${result.correctAnswers})`);
             }
           });
+          console.log(`[TRI] Área ${area}: ${validResults} válidos, ${nullResults} nulos de ${results.length} total`);
+          console.log(`[TRI] Área ${area}: triScoresMap.size após processar = ${triScoresMap.size}`);
+        } else {
+          const errorText = await response.text();
+          console.error(`[TRI] Erro na resposta do backend para área ${area}:`, response.status, errorText);
         }
       } catch (error) {
         console.error(`[TRI] Erro ao calcular TRI para área ${area}:`, error);
@@ -893,8 +952,25 @@ export default function Home() {
       }
     });
     
-    setTriScores(finalTriScores);
-    return finalTriScores;
+    // Atualizar o estado do triScores
+    // Criar um novo Map para forçar o React a detectar a mudança
+    const newTriScoresMap = new Map(finalTriScores);
+    setTriScores(newTriScoresMap);
+    setTriScoresCount(newTriScoresMap.size); // Atualizar contador para forçar re-render
+    
+    console.log("[TRI] Scores calculados:", newTriScoresMap.size, "alunos");
+    console.log("[TRI] Detalhes dos scores:", Array.from(newTriScoresMap.entries()));
+    
+    // Se não há scores, logar detalhes para debug
+    if (newTriScoresMap.size === 0) {
+      console.error("[TRI] NENHUM SCORE CALCULADO!");
+      console.error("  - triScoresMap.size:", triScoresMap.size);
+      console.error("  - studentsWithScores.length:", studentsWithScores.length);
+      console.error("  - answerKey.length:", answerKey.length);
+      console.error("  - areas:", areas);
+    }
+    
+    return newTriScoresMap;
   };
 
   const handleApplyAnswerKey = async () => {
@@ -957,14 +1033,53 @@ export default function Home() {
       await handleApplyAnswerKey();
     }
     
-    if (studentsWithScores.length === 0) {
+    // Validações rigorosas
+    console.log("[TRI] Validação inicial:");
+    console.log("  - students.length:", students.length);
+    console.log("  - studentsWithScores.length:", studentsWithScores.length);
+    console.log("  - answerKey.length:", answerKey.length);
+    console.log("  - questionContents.length:", questionContents.length);
+    
+    if (students.length === 0) {
       toast({
         title: "Dados insuficientes",
-        description: "Processe um PDF primeiro.",
+        description: "Nenhum aluno processado. Processe um PDF primeiro.",
         variant: "destructive",
       });
       return;
     }
+    
+    if (studentsWithScores.length === 0) {
+      toast({
+        title: "Dados insuficientes",
+        description: "Nenhum aluno válido encontrado. Verifique se os alunos têm respostas.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (answerKey.length === 0) {
+      toast({
+        title: "Gabarito não configurado",
+        description: "Configure o gabarito antes de calcular o TRI.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Verificar se os alunos têm IDs válidos
+    const alunosSemId = studentsWithScores.filter(s => !s.id || s.id.trim() === "");
+    if (alunosSemId.length > 0) {
+      console.error("[TRI] Alunos sem ID:", alunosSemId);
+      toast({
+        title: "Erro nos dados",
+        description: `${alunosSemId.length} aluno(s) sem ID válido.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    console.log("[TRI] IDs dos alunos:", studentsWithScores.map(s => s.id));
 
     // Se for ENEM, calcular TRI automaticamente para todas as áreas
     const areas = getAreasByTemplate(selectedTemplate.name, numQuestions);
@@ -979,31 +1094,100 @@ export default function Home() {
 
     setAnswerKeyDialogOpen(false);
     
+    // Usar ano 2023 por padrão (último ano disponível no CSV)
+    const ano = 2023;
+    console.log("[TRI] Calculando TRI para", areas.length, "áreas, ano:", ano);
+    
     toast({
       title: "Calculando TRI",
       description: `Calculando notas TRI para ${areas.length} área(s)...`,
     });
 
-    await calculateTRIForAllAreas(areas);
+    const calculatedTriScores = await calculateTRIForAllAreas(areas, ano);
 
-    // Atualizar notas dos alunos com TRI
-    setStudents(prev => prev.map(student => {
-      const triScore = triScores.get(student.id);
-      if (triScore !== undefined) {
-        // Converter TRI (0-1000) para porcentagem (0-100)
-        const triPercentage = (triScore / 10);
-        return {
-          ...student,
-          score: triPercentage,
-        };
+    // Verificar se o cálculo foi bem-sucedido
+    console.log("[TRI] Resultado do cálculo:", calculatedTriScores);
+    console.log("[TRI] Tamanho do Map:", calculatedTriScores?.size || 0);
+    
+    if (!calculatedTriScores) {
+      console.error("[TRI] calculateTRIForAllAreas retornou null/undefined");
+      toast({
+        title: "Erro no cálculo",
+        description: "A função de cálculo retornou um valor inválido. Verifique o console para mais detalhes.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (calculatedTriScores.size === 0) {
+      console.error("[TRI] Nenhum score TRI calculado. Possíveis causas:");
+      console.error("  - Backend não encontrou dados no CSV para as combinações área+acertos+ano");
+      console.error("  - Backend retornou triScore: null para todos os alunos");
+      console.error("  - Problema na correspondência de IDs entre frontend e backend");
+      
+      toast({
+        title: "Nenhum resultado TRI",
+        description: `Nenhuma nota TRI foi calculada. Verifique se há dados no CSV para as combinações área+acertos+ano 2023. Verifique o console para mais detalhes.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Garantir que o triScores foi atualizado
+    // O setTriScores já foi chamado dentro de calculateTRIForAllAreas
+    // Mas vamos garantir que o estado está atualizado
+    console.log("[TRI] Scores retornados:", calculatedTriScores.size, "alunos");
+    
+    // IMPORTANTE: Atualizar ambos os estados de forma síncrona
+    // Criar um novo Map para garantir que o React detecte a mudança
+    const newTriScoresMap = new Map(calculatedTriScores);
+    
+    // Atualizar o contador PRIMEIRO (número primitivo força re-render)
+    setTriScoresCount(calculatedTriScores.size);
+    
+    // Depois atualizar o Map
+    setTriScores(newTriScoresMap);
+    
+    console.log("[TRI] Estados atualizados - Contador:", calculatedTriScores.size, "Map size:", newTriScoresMap.size);
+
+    // Atualizar notas dos alunos com TRI usando o resultado retornado
+    if (calculatedTriScores && calculatedTriScores.size > 0) {
+      setStudents(prev => prev.map(student => {
+        const triScore = calculatedTriScores.get(student.id);
+        if (triScore !== undefined) {
+          // Converter TRI (0-1000) para porcentagem (0-100)
+          const triPercentage = (triScore / 10);
+          return {
+            ...student,
+            score: triPercentage,
+            triScore: triScore, // Armazenar também o TRI score no aluno
+          };
+        }
+        return student;
+      }));
+
+      // O setTriScores já foi chamado dentro de calculateTRIForAllAreas
+      // O React vai re-renderizar automaticamente e habilitar a aba
+      toast({
+        title: "Notas TRI calculadas",
+        description: `Notas TRI calculadas para ${calculatedTriScores.size} aluno(s). A aba "Estatísticas TRI" está disponível.`,
+      });
+      
+      // Mudar para a aba TRI automaticamente após o cálculo
+      // IMPORTANTE: Usar o valor calculado diretamente, não depender do estado
+      const finalCount = calculatedTriScores.size;
+      console.log("[TRI] Navegando para aba TRI. Contador:", finalCount);
+      
+      // Garantir que o contador está atualizado
+      if (triScoresCount !== finalCount) {
+        setTriScoresCount(finalCount);
       }
-      return student;
-    }));
-
-    toast({
-      title: "TRI calculado",
-      description: `Notas TRI calculadas para ${triScores.size} alunos.`,
-    });
+      
+      // Navegar após um pequeno delay para garantir renderização
+      setTimeout(() => {
+        setMainActiveTab("tri");
+      }, 150);
+    }
   };
 
   const handleCalculateTCT = () => {
@@ -1023,28 +1207,78 @@ export default function Home() {
 
     setAnswerKeyDialogOpen(false);
 
-    // TCT: cada acerto vale um ponto, escala de 0,0 a 10,0
-    setStudents(prev => prev.map(student => {
-      const correctAnswers = student.correctAnswers || 0;
-      const totalQuestions = answerKey.length;
-      // Calcular nota de 0,0 a 10,0
-      const tctScore = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 10 : 0;
-      // Converter para porcentagem para manter compatibilidade (0-100)
-      const tctPercentage = (tctScore / 10) * 100;
-      
-      return {
-        ...student,
-        score: tctPercentage,
-      };
-    }));
+    // TCT: calcular por área (cada área de 45 questões vale 10,0)
+    const areas = getAreasByTemplate(selectedTemplate.name, numQuestions);
+    
+    if (areas.length > 0) {
+      // ENEM: calcular cada área separadamente (0,0 a 10,0) e fazer MÉDIA
+      setStudents(prev => prev.map(student => {
+        const areaScoresMap: Record<string, number> = {};
+        const areaScores: number[] = [];
+        
+        areas.forEach(({ area, start, end }) => {
+          const answersForArea = student.answers.slice(start - 1, end);
+          const answerKeyForArea = answerKey.slice(start - 1, end);
+          
+          let correctCount = 0;
+          answersForArea.forEach((answer, idx) => {
+            if (answer && answerKeyForArea[idx] && answer.toUpperCase() === answerKeyForArea[idx].toUpperCase()) {
+              correctCount++;
+            }
+          });
+          
+          // Cada acerto vale 0,222 pontos (10,0 / 45 = 0,2222...)
+          const areaScore = correctCount * 0.222;
+          areaScoresMap[area] = parseFloat(areaScore.toFixed(1));
+          areaScores.push(areaScore);
+        });
+        
+        // Nota final TCT: MÉDIA das áreas (0,0 a 10,0)
+        // Cada área tem nota individual de 0,0 a 10,0
+        // A nota final é a média das áreas
+        const averageTCT = areaScores.length > 0 
+          ? areaScores.reduce((sum, score) => sum + score, 0) / areaScores.length 
+          : 0;
+        
+        // Armazenar como porcentagem para compatibilidade (0-100), será convertido na exibição
+        const tctPercentage = averageTCT * 10; // Multiplicar por 10 para converter 0-10 em 0-100
+        
+        return {
+          ...student,
+          score: tctPercentage,
+          areaScores: areaScoresMap, // Armazenar notas por área
+        };
+      }));
+    } else {
+      // Outros templates: calcular proporcionalmente (0,0 a 10,0)
+      setStudents(prev => prev.map(student => {
+        const correctAnswers = student.correctAnswers || 0;
+        const totalQuestions = answerKey.length;
+        // Calcular nota de 0,0 a 10,0
+        const tctScore = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 10 : 0;
+        // Armazenar como porcentagem para compatibilidade, mas será convertido na exibição
+        const tctPercentage = parseFloat((tctScore * 10).toFixed(3)); // Multiplicar por 10 para converter 0-10 em 0-100
+        
+        return {
+          ...student,
+          score: tctPercentage,
+        };
+      }));
+    }
 
     // Limpar TRI scores quando usar TCT
     setTriScores(new Map());
+    setTriScoresCount(0);
 
     toast({
       title: "Notas TCT calculadas",
       description: `Notas calculadas na escala de 0,0 a 10,0 para ${studentsWithScores.length} alunos.`,
     });
+    
+    // Mudar para a aba TCT automaticamente após o cálculo
+    setTimeout(() => {
+      setMainActiveTab("tct");
+    }, 500);
   };
 
   const handleGenerateEmptyAnswerKey = () => {
@@ -2247,30 +2481,44 @@ export default function Home() {
                   {students.length} aluno{students.length !== 1 ? "s" : ""} processado{students.length !== 1 ? "s" : ""}
                   {answerKey.length > 0 && statistics && (
                     <span className="text-muted-foreground">
-                      {" "}| Média: {statistics.averageScore}% | Aprovação: {statistics.passingRate}%
+                      {" "}| Média: {statistics.averageScore}%
                     </span>
                   )}
                 </span>
               </div>
             </div>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full max-w-md grid-cols-3">
-                <TabsTrigger value="students" data-testid="tab-students">
-                  <FileText className="h-4 w-4 mr-2" />
+            <Tabs value={mainActiveTab} onValueChange={setMainActiveTab} className="w-full">
+              <TabsList className="grid w-full grid-cols-5">
+                <TabsTrigger value="alunos" data-testid="tab-alunos">
+                  <Users className="h-4 w-4 mr-2" />
                   Alunos
                 </TabsTrigger>
-                <TabsTrigger value="answerkey" data-testid="tab-answerkey" disabled={answerKey.length === 0}>
+                <TabsTrigger value="gabarito" data-testid="tab-gabarito">
                   <ClipboardList className="h-4 w-4 mr-2" />
                   Gabarito
                 </TabsTrigger>
-                <TabsTrigger value="statistics" data-testid="tab-statistics" disabled={!statistics}>
+                <TabsTrigger 
+                  value="tri" 
+                  data-testid="tab-tri" 
+                  disabled={triScoresCount === 0}
+                  className={triScoresCount === 0 ? "opacity-50 cursor-not-allowed" : ""}
+                >
                   <BarChart3 className="h-4 w-4 mr-2" />
-                  Estatísticas
+                  Estatísticas TRI {triScoresCount > 0 && `(${triScoresCount})`}
+                </TabsTrigger>
+                <TabsTrigger value="tct" data-testid="tab-tct" disabled={!statistics}>
+                  <Calculator className="h-4 w-4 mr-2" />
+                  Estatísticas TCT
+                </TabsTrigger>
+                <TabsTrigger value="conteudos" data-testid="tab-conteudos" disabled={!statistics}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Conteúdos
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="students" className="mt-4">
+              {/* ABA 1: ALUNOS */}
+              <TabsContent value="alunos" className="mt-4">
                 <div className="mb-3 flex items-center gap-4 flex-wrap text-xs text-muted-foreground">
                   <div className="flex items-center gap-1">
                     <Info className="h-3 w-3" />
@@ -2418,7 +2666,8 @@ export default function Home() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="answerkey" className="mt-4">
+              {/* ABA 2: GABARITO */}
+              <TabsContent value="gabarito" className="mt-4">
                 {answerKey.length > 0 && (
                   <Card>
                     <CardHeader>
@@ -2467,9 +2716,194 @@ export default function Home() {
                 )}
               </TabsContent>
 
-              <TabsContent value="statistics" className="mt-4">
+              {/* ABA 3: ESTATISTICAS TRI */}
+              <TabsContent value="tri" className="mt-4">
+                {statistics && triScoresCount > 0 && triScores.size > 0 && (
+                  <div className="space-y-4" data-testid="statistics-tri-grid">
+                    {/* Card de Resumo TRI */}
+                    <Card className="border-blue-200 dark:border-blue-800">
+                      <CardHeader>
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <BarChart3 className="h-5 w-5 text-blue-600" />
+                          Notas TRI Calculadas
+                        </CardTitle>
+                        <CardDescription>
+                          Notas calculadas usando Teoria de Resposta ao Item (TRI) com base na coerência das respostas
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div>
+                            <p className="text-sm text-muted-foreground">Média TRI</p>
+                            <p className="text-2xl font-bold text-blue-600">
+                              {(() => {
+                                const scores = Array.from(triScores.values());
+                                const avg = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+                                return avg.toFixed(1);
+                              })()}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Maior TRI</p>
+                            <p className="text-2xl font-bold text-green-600">
+                              {(() => {
+                                const scores = Array.from(triScores.values());
+                                const max = scores.length > 0 ? Math.max(...scores) : 0;
+                                return max.toFixed(1);
+                              })()}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Menor TRI</p>
+                            <p className="text-2xl font-bold text-red-600">
+                              {(() => {
+                                const scores = Array.from(triScores.values());
+                                const min = scores.length > 0 ? Math.min(...scores) : 0;
+                                return min.toFixed(1);
+                              })()}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Alunos com TRI</p>
+                            <p className="text-2xl font-bold">
+                              {triScoresCount}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Gráfico de Dispersão: Acertos vs TRI */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">Dispersão: Acertos vs TRI</CardTitle>
+                        <CardDescription>
+                          Relação entre número de acertos e nota TRI
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={400}>
+                          <ScatterChart>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis 
+                              type="number" 
+                              dataKey="acertos" 
+                              name="Acertos" 
+                              label={{ value: "Número de Acertos", position: "insideBottom", offset: -5 }}
+                              tick={{ fontSize: 12 }}
+                            />
+                            <YAxis 
+                              type="number" 
+                              dataKey="tri" 
+                              name="TRI" 
+                              label={{ value: "Nota TRI", angle: -90, position: "insideLeft" }}
+                              tick={{ fontSize: 12 }}
+                            />
+                            <RechartsTooltip 
+                              cursor={{ strokeDasharray: '3 3' }}
+                              content={({ active, payload }) => {
+                                if (active && payload && payload.length) {
+                                  const data = payload[0].payload;
+                                  return (
+                                    <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
+                                      <p className="font-semibold">{data.nome}</p>
+                                      <p className="text-sm text-muted-foreground">Acertos: {data.acertos}</p>
+                                      <p className="text-sm text-blue-600 font-medium">TRI: {data.tri.toFixed(1)}</p>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              }}
+                            />
+                            <Scatter 
+                              name="Alunos" 
+                              data={(() => {
+                                return studentsWithScores.map(student => {
+                                  const triScore = triScores.get(student.id);
+                                  return {
+                                    nome: student.studentName,
+                                    acertos: student.correctAnswers || 0,
+                                    tri: triScore || 0,
+                                  };
+                                }).filter(d => d.tri > 0);
+                              })()} 
+                              fill="#3b82f6" 
+                            />
+                          </ScatterChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+
+                    {/* Gráfico Radar por Área (se ENEM) */}
+                    {(() => {
+                      const areas = getAreasByTemplate(selectedTemplate.name, numQuestions);
+                      if (areas.length > 0) {
+                        const areaTriData = areas.map(({ area }) => {
+                          const studentsForArea = studentsWithScores
+                            .map(student => {
+                              const triScore = triScores.get(student.id);
+                              return triScore || 0;
+                            })
+                            .filter(s => s > 0);
+                          const avg = studentsForArea.length > 0 
+                            ? studentsForArea.reduce((a, b) => a + b, 0) / studentsForArea.length 
+                            : 0;
+                          return { area, value: avg };
+                        });
+
+                        if (areaTriData.some(d => d.value > 0)) {
+                          return (
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="text-base">Radar: TRI por Área</CardTitle>
+                                <CardDescription>
+                                  Média TRI por área de conhecimento
+                                </CardDescription>
+                              </CardHeader>
+                              <CardContent>
+                                <ResponsiveContainer width="100%" height={400}>
+                                  <RadarChart data={areaTriData}>
+                                    <PolarGrid />
+                                    <PolarAngleAxis dataKey="area" tick={{ fontSize: 12 }} />
+                                    <PolarRadiusAxis angle={90} domain={[0, 1000]} tick={{ fontSize: 10 }} />
+                                    <Radar 
+                                      name="TRI" 
+                                      dataKey="value" 
+                                      stroke="#3b82f6" 
+                                      fill="#3b82f6" 
+                                      fillOpacity={0.6} 
+                                    />
+                                    <RechartsTooltip 
+                                      formatter={(value: number) => [value.toFixed(1), "TRI"]}
+                                    />
+                                  </RadarChart>
+                                </ResponsiveContainer>
+                              </CardContent>
+                            </Card>
+                          );
+                        }
+                      }
+                      return null;
+                    })()}
+                  </div>
+                )}
+                {triScoresCount === 0 && (
+                  <Card>
+                    <CardContent className="py-12">
+                      <div className="text-center text-muted-foreground">
+                        <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p className="text-lg font-medium mb-2">Nenhum dado TRI disponível</p>
+                        <p className="text-sm">Calcule as notas TRI primeiro usando o botão "Calcular por TRI Média" na aba Gabarito.</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+
+              {/* ABA 4: ESTATISTICAS TCT */}
+              <TabsContent value="tct" className="mt-4">
                 {statistics && (
-                  <div className="space-y-4" data-testid="statistics-grid">
+                  <div className="space-y-4" data-testid="statistics-tct-grid">
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
                       <Card data-testid="card-total-students">
                         <CardHeader className="pb-2">
@@ -2480,179 +2914,177 @@ export default function Home() {
                       <Card data-testid="card-average-score">
                         <CardHeader className="pb-2">
                           <CardDescription>Média Geral</CardDescription>
-                          <CardTitle className="text-3xl" data-testid="text-average-score">{statistics.averageScore}%</CardTitle>
+                          <CardTitle className="text-3xl" data-testid="text-average-score">
+                            {(() => {
+                              // Converter de porcentagem (0-100) para escala 0,0 a 10,0
+                              const tctScore = statistics.averageScore / 10;
+                              return tctScore.toFixed(1);
+                            })()}
+                          </CardTitle>
                         </CardHeader>
                       </Card>
                       <Card data-testid="card-highest-score">
                         <CardHeader className="pb-2">
                           <CardDescription>Maior Nota</CardDescription>
-                          <CardTitle className="text-3xl text-green-600" data-testid="text-highest-score">{statistics.highestScore}%</CardTitle>
+                          <CardTitle className="text-3xl text-green-600" data-testid="text-highest-score">
+                            {(() => {
+                              // Converter de porcentagem (0-100) para escala 0,0 a 10,0
+                              const tctScore = statistics.highestScore / 10;
+                              return tctScore.toFixed(1);
+                            })()}
+                          </CardTitle>
                         </CardHeader>
                       </Card>
                       <Card data-testid="card-lowest-score">
                         <CardHeader className="pb-2">
                           <CardDescription>Menor Nota</CardDescription>
-                          <CardTitle className="text-3xl text-red-600" data-testid="text-lowest-score">{statistics.lowestScore}%</CardTitle>
-                        </CardHeader>
-                      </Card>
-                      <Card data-testid="card-passing-rate">
-                        <CardHeader className="pb-2">
-                          <CardDescription>Taxa de Aprovação</CardDescription>
-                          <CardTitle className="text-3xl" data-testid="text-passing-rate">{statistics.passingRate}%</CardTitle>
-                        </CardHeader>
-                      </Card>
-                    </div>
-
-                    {triScores.size > 0 && (
-                      <Card className="mb-4 border-blue-200 dark:border-blue-800">
-                        <CardHeader>
-                          <CardTitle className="text-base flex items-center gap-2">
-                            <BarChart3 className="h-5 w-5 text-blue-600" />
-                            Notas TRI Calculadas
+                          <CardTitle className="text-3xl text-red-600" data-testid="text-lowest-score">
+                            {(() => {
+                              // Converter de porcentagem (0-100) para escala 0,0 a 10,0
+                              const tctScore = statistics.lowestScore / 10;
+                              return tctScore.toFixed(1);
+                            })()}
                           </CardTitle>
-                          <CardDescription>
-                            Notas calculadas usando Teoria de Resposta ao Item (TRI) com base na coerência das respostas
-                          </CardDescription>
                         </CardHeader>
-                        <CardContent>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div>
-                              <p className="text-sm text-muted-foreground">Média TRI</p>
-                              <p className="text-2xl font-bold text-blue-600">
-                                {(() => {
-                                  const scores = Array.from(triScores.values());
-                                  const avg = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
-                                  return avg.toFixed(1);
-                                })()}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-muted-foreground">Maior TRI</p>
-                              <p className="text-2xl font-bold text-green-600">
-                                {(() => {
-                                  const scores = Array.from(triScores.values());
-                                  const max = scores.length > 0 ? Math.max(...scores) : 0;
-                                  return max.toFixed(1);
-                                })()}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-muted-foreground">Menor TRI</p>
-                              <p className="text-2xl font-bold text-red-600">
-                                {(() => {
-                                  const scores = Array.from(triScores.values());
-                                  const min = scores.length > 0 ? Math.min(...scores) : 0;
-                                  return min.toFixed(1);
-                                })()}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-muted-foreground">Alunos com TRI</p>
-                              <p className="text-2xl font-bold">
-                                {triScores.size}
-                              </p>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <Card data-testid="card-score-distribution">
-                        <CardHeader>
-                          <CardTitle className="text-base">Distribuição de Notas</CardTitle>
-                          <CardDescription>
-                            Quantidade de alunos por faixa de nota
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <ResponsiveContainer width="100%" height={250}>
-                            <BarChart data={scoreDistribution}>
-                              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                              <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                              <RechartsTooltip 
-                                formatter={(value: number) => [`${value} aluno(s)`, "Quantidade"]}
-                                contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
-                              />
-                              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                                {scoreDistribution.map((entry, index) => (
-                                  <Cell key={`cell-${index}`} fill={entry.color} />
-                                ))}
-                              </Bar>
-                            </BarChart>
-                          </ResponsiveContainer>
-                        </CardContent>
-                      </Card>
-
-                      <Card data-testid="card-confidence-distribution">
-                        <CardHeader>
-                          <div className="flex items-center gap-2">
-                            <CardTitle className="text-base">Confiança do OCR</CardTitle>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button size="icon" variant="ghost" className="h-6 w-6">
-                                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent className="max-w-xs">
-                                <div className="space-y-2 text-sm">
-                                  <p className="font-semibold">Níveis de Confiança:</p>
-                                  <div className="flex items-center gap-2">
-                                    <div className="h-3 w-3 rounded bg-green-500" />
-                                    <span>Alta (80%+): Leitura confiável</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <div className="h-3 w-3 rounded bg-yellow-500" />
-                                    <span>Média (60-79%): Verificar dados</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <div className="h-3 w-3 rounded bg-red-500" />
-                                    <span>Baixa (&lt;60%): Revisão necessária</span>
-                                  </div>
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                          <CardDescription>
-                            Distribuição da confiança na leitura
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          {confidenceDistribution.length > 0 ? (
-                            <ResponsiveContainer width="100%" height={250}>
-                              <PieChart>
-                                <Pie
-                                  data={confidenceDistribution}
-                                  cx="50%"
-                                  cy="50%"
-                                  innerRadius={60}
-                                  outerRadius={80}
-                                  paddingAngle={5}
-                                  dataKey="value"
-                                  label={({ name, value }) => `${name}: ${value}`}
-                                  labelLine={{ stroke: 'hsl(var(--muted-foreground))' }}
-                                >
-                                  {confidenceDistribution.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.color} />
-                                  ))}
-                                </Pie>
-                                <Legend />
-                              </PieChart>
-                            </ResponsiveContainer>
-                          ) : (
-                            <div className="h-[250px] flex items-center justify-center text-muted-foreground">
-                              Nenhum dado de confiança disponível
-                            </div>
-                          )}
-                        </CardContent>
                       </Card>
                     </div>
 
+                    {/* Gráfico Min/Med/Max por Área */}
+                    {(() => {
+                      const areas = getAreasByTemplate(selectedTemplate.name, numQuestions);
+                      if (areas.length > 0 && statistics.studentStats) {
+                        const areaStats = areas.map(({ area }) => {
+                          const areaScores = statistics.studentStats!
+                            .map(s => {
+                              const score = area === "LC" ? s.lc : area === "CH" ? s.ch : area === "CN" ? s.cn : area === "MT" ? s.mt : null;
+                              return score !== null && score !== undefined ? score : null;
+                            })
+                            .filter((s): s is number => s !== null);
+                          
+                          if (areaScores.length === 0) return null;
+                          
+                          return {
+                            area,
+                            min: Math.min(...areaScores),
+                            med: areaScores.reduce((a, b) => a + b, 0) / areaScores.length,
+                            max: Math.max(...areaScores),
+                          };
+                        }).filter((s): s is { area: string; min: number; med: number; max: number } => s !== null);
+
+                        return (
+                          <Card>
+                            <CardHeader>
+                              <CardTitle className="text-base">Notas TCT: Min, Média e Max por Área</CardTitle>
+                              <CardDescription>
+                                Distribuição de notas TCT por área de conhecimento
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                              <ResponsiveContainer width="100%" height={400}>
+                                <BarChart data={areaStats}>
+                                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                                  <XAxis dataKey="area" tick={{ fontSize: 12 }} />
+                                  <YAxis tick={{ fontSize: 12 }} domain={[0, 10]} />
+                                  <RechartsTooltip 
+                                    formatter={(value: number) => [value.toFixed(1), ""]}
+                                    contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                                  />
+                                  <Legend />
+                                  <Bar dataKey="min" fill="#ef4444" name="Mínima" radius={[4, 4, 0, 0]} />
+                                  <Bar dataKey="med" fill="#3b82f6" name="Média" radius={[4, 4, 0, 0]} />
+                                  <Bar dataKey="max" fill="#10b981" name="Máxima" radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </CardContent>
+                          </Card>
+                        );
+                      }
+                      return null;
+                    })()}
+
+                    {/* Distribuição de Notas TCT */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">Distribuição de Notas TCT</CardTitle>
+                        <CardDescription>
+                          Quantidade de alunos por faixa de nota (escala 0,0 a 10,0)
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <BarChart data={(() => {
+                            // Criar distribuição específica para TCT (0,0 a 10,0)
+                            const tctRanges = [
+                              { name: "0,0-2,0", min: 0, max: 2.0, count: 0, color: "#ef4444" },
+                              { name: "2,1-4,0", min: 2.1, max: 4.0, count: 0, color: "#f97316" },
+                              { name: "4,1-6,0", min: 4.1, max: 6.0, count: 0, color: "#eab308" },
+                              { name: "6,1-8,0", min: 6.1, max: 8.0, count: 0, color: "#22c55e" },
+                              { name: "8,1-10,0", min: 8.1, max: 10.0, count: 0, color: "#10b981" },
+                            ];
+                            
+                            studentsWithScores.forEach(student => {
+                              // Converter score de porcentagem (0-100) para TCT (0,0-10,0)
+                              const tctScore = (student.score || 0) / 10;
+                              for (const range of tctRanges) {
+                                if (tctScore >= range.min && tctScore <= range.max) {
+                                  range.count++;
+                                  break;
+                                }
+                              }
+                            });
+                            
+                            return tctRanges;
+                          })()}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                            <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                            <RechartsTooltip 
+                              formatter={(value: number) => [`${value} aluno(s)`, "Quantidade"]}
+                              contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                            />
+                            <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                              {(() => {
+                                const tctRanges = [
+                                  { name: "0,0-2,0", min: 0, max: 2.0, count: 0, color: "#ef4444" },
+                                  { name: "2,1-4,0", min: 2.1, max: 4.0, count: 0, color: "#f97316" },
+                                  { name: "4,1-6,0", min: 4.1, max: 6.0, count: 0, color: "#eab308" },
+                                  { name: "6,1-8,0", min: 6.1, max: 8.0, count: 0, color: "#22c55e" },
+                                  { name: "8,1-10,0", min: 8.1, max: 10.0, count: 0, color: "#10b981" },
+                                ];
+                                
+                                studentsWithScores.forEach(student => {
+                                  const tctScore = (student.score || 0) / 10;
+                                  for (const range of tctRanges) {
+                                    if (tctScore >= range.min && tctScore <= range.max) {
+                                      range.count++;
+                                      break;
+                                    }
+                                  }
+                                });
+                                
+                                return tctRanges;
+                              })().map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* ABA 5: CONTEÚDOS */}
+              <TabsContent value="conteudos" className="mt-4">
+                {statistics && (
+                  <div className="space-y-4" data-testid="statistics-conteudos-grid">
+                    {/* Card de Análise por Questão com Conteúdo */}
                     <Card>
                       <CardHeader>
                         <CardTitle className="text-base">Análise por Questão</CardTitle>
                         <CardDescription>
-                          Porcentagem de acertos em cada questão
+                          Porcentagem de acertos e conteúdo de cada questão
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
@@ -2682,11 +3114,16 @@ export default function Home() {
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent className="max-w-xs">
-                                <p className="font-medium">Q{stat.questionNumber}</p>
+                                <p className="font-medium">Questão {stat.questionNumber}</p>
                                 {stat.content && (
                                   <p className="text-sm mt-1">{stat.content}</p>
                                 )}
-                                <p className="text-xs text-muted-foreground mt-1">{stat.correctPercentage}% de acertos</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Acertos: {stat.correctPercentage}% ({stat.correctCount}/{statistics.totalStudents})
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Erros: {stat.wrongCount} ({Math.round((stat.wrongCount / statistics.totalStudents) * 100)}%)
+                                </p>
                               </TooltipContent>
                             </Tooltip>
                           ))}
@@ -2725,120 +3162,6 @@ export default function Home() {
                                 </div>
                               </div>
                             ))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Estatísticas por Turma */}
-                    {statistics.turmaStats && statistics.turmaStats.length > 0 && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-base">Estatísticas por Turma</CardTitle>
-                          <CardDescription>
-                            Desempenho agrupado por turma
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="overflow-x-auto">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Turma</TableHead>
-                                  <TableHead className="text-center">Alunos</TableHead>
-                                  <TableHead className="text-center">Média</TableHead>
-                                  <TableHead className="text-center">Aprovação</TableHead>
-                                  <TableHead className="text-center">Acertos</TableHead>
-                                  <TableHead className="text-center">Erros</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {statistics.turmaStats.map((turma, idx) => (
-                                  <TableRow key={idx}>
-                                    <TableCell className="font-medium">{turma.turma}</TableCell>
-                                    <TableCell className="text-center">{turma.totalAlunos}</TableCell>
-                                    <TableCell className="text-center">
-                                      <span className={`font-semibold ${
-                                        turma.mediaNota >= 60 ? "text-green-600" : "text-red-600"
-                                      }`}>
-                                        {turma.mediaNota}%
-                                      </span>
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                      <Badge variant={turma.taxaAprovacao >= 60 ? "default" : "secondary"}>
-                                        {turma.taxaAprovacao}%
-                                      </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-center text-green-600 font-medium">
-                                      {turma.totalAcertos}
-                                    </TableCell>
-                                    <TableCell className="text-center text-red-600 font-medium">
-                                      {turma.totalErros}
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Estatísticas por Aluno */}
-                    {statistics.studentStats && statistics.studentStats.length > 0 && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-base">Estatísticas por Aluno</CardTitle>
-                          <CardDescription>
-                            Desempenho individual de cada aluno (ordenado por nota)
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="overflow-x-auto max-h-96 overflow-y-auto">
-                            <Table>
-                              <TableHeader className="sticky top-0 bg-card z-10">
-                                <TableRow>
-                                  <TableHead>Matrícula</TableHead>
-                                  <TableHead>Nome</TableHead>
-                                  <TableHead>Turma</TableHead>
-                                  <TableHead className="text-center">Acertos</TableHead>
-                                  <TableHead className="text-center">Erros</TableHead>
-                                  <TableHead className="text-center">Acerto - TRI</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {statistics.studentStats
-                                  .sort((a, b) => {
-                                    // Ordenar por TRI se disponível, senão por acertos
-                                    if (a.triScore !== null && a.triScore !== undefined && b.triScore !== null && b.triScore !== undefined) {
-                                      return b.triScore - a.triScore;
-                                    }
-                                    return b.acertos - a.acertos;
-                                  })
-                                  .map((student, idx) => (
-                                  <TableRow key={idx}>
-                                    <TableCell className="font-mono text-sm">{student.matricula}</TableCell>
-                                    <TableCell className="font-medium">{student.nome}</TableCell>
-                                    <TableCell>{student.turma}</TableCell>
-                                    <TableCell className="text-center text-green-600 font-medium">
-                                      {student.acertos}
-                                    </TableCell>
-                                    <TableCell className="text-center text-red-600 font-medium">
-                                      {student.erros}
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                      {student.triScore !== null && student.triScore !== undefined ? (
-                                        <span className="font-semibold text-blue-600">
-                                          {student.triScore.toFixed(1)}
-                                        </span>
-                                      ) : (
-                                        <span className="text-muted-foreground text-sm">-</span>
-                                      )}
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
                           </div>
                         </CardContent>
                       </Card>
