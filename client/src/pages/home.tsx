@@ -128,6 +128,33 @@ export default function Home() {
     return turmaMatch ? turmaMatch[1].trim() : "Sem Turma";
   };
 
+  // Função para detectar áreas baseado no template
+  const getAreasByTemplate = useCallback((templateName: string, numQuestions: number): Array<{ area: string; start: number; end: number }> => {
+    if (templateName === "ENEM - Dia 1") {
+      // Dia 1: questões 1-90, LC (1-45) e CH (46-90)
+      return [
+        { area: "LC", start: 1, end: 45 },   // Linguagens e Códigos
+        { area: "CH", start: 46, end: 90 },  // Ciências Humanas
+      ];
+    } else if (templateName === "ENEM - Dia 2") {
+      // Dia 2: questões 1-90, CN (1-45) e MT (46-90)
+      // IMPORTANTE: As questões do Dia 2 são numeradas de 1 a 90, não 91-180
+      return [
+        { area: "CN", start: 1, end: 45 }, // Ciências da Natureza (primeiras 45 questões)
+        { area: "MT", start: 46, end: 90 }, // Matemática (últimas 45 questões)
+      ];
+    } else if (templateName === "ENEM") {
+      // ENEM completo: 180 questões
+      return [
+        { area: "LC", start: 1, end: 45 },
+        { area: "CH", start: 46, end: 90 },
+        { area: "CN", start: 91, end: 135 },
+        { area: "MT", start: 136, end: 180 },
+      ];
+    }
+    return []; // Outros templates não têm áreas definidas
+  }, []);
+
   const studentsWithScores = useMemo(() => {
     if (answerKey.length === 0) return students;
     
@@ -178,7 +205,7 @@ export default function Home() {
         areaCorrectAnswers, // Adicionar acertos por área
       };
     });
-  }, [students, answerKey, selectedTemplate.name, numQuestions]);
+  }, [students, answerKey, selectedTemplate.name, numQuestions, getAreasByTemplate]);
 
   const statistics = useMemo((): ExamStatistics | null => {
     if (studentsWithScores.length === 0 || answerKey.length === 0) return null;
@@ -825,33 +852,6 @@ export default function Home() {
       }
       return newQueue;
     });
-  };
-
-  // Função para detectar áreas baseado no template
-  const getAreasByTemplate = (templateName: string, numQuestions: number): Array<{ area: string; start: number; end: number }> => {
-    if (templateName === "ENEM - Dia 1") {
-      // Dia 1: questões 1-90, LC (1-45) e CH (46-90)
-      return [
-        { area: "LC", start: 1, end: 45 },   // Linguagens e Códigos
-        { area: "CH", start: 46, end: 90 },  // Ciências Humanas
-      ];
-    } else if (templateName === "ENEM - Dia 2") {
-      // Dia 2: questões 1-90, CN (1-45) e MT (46-90)
-      // IMPORTANTE: As questões do Dia 2 são numeradas de 1 a 90, não 91-180
-      return [
-        { area: "CN", start: 1, end: 45 }, // Ciências da Natureza (primeiras 45 questões)
-        { area: "MT", start: 46, end: 90 }, // Matemática (últimas 45 questões)
-      ];
-    } else if (templateName === "ENEM") {
-      // ENEM completo: 180 questões
-      return [
-        { area: "LC", start: 1, end: 45 },
-        { area: "CH", start: 46, end: 90 },
-        { area: "CN", start: 91, end: 135 },
-        { area: "MT", start: 136, end: 180 },
-      ];
-    }
-    return []; // Outros templates não têm áreas definidas
   };
 
   // Função para calcular TRI automaticamente para todas as áreas
