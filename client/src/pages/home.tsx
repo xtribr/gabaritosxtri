@@ -88,7 +88,8 @@ export default function Home() {
   const [questionContents, setQuestionContents] = useState<Array<{ questionNumber: number; answer: string; content: string }>>([]);
   const [answerKeyDialogOpen, setAnswerKeyDialogOpen] = useState(false);
   const [numQuestions, setNumQuestions] = useState<number>(45);
-  const [triScores, setTriScores] = useState<Map<string, number>>(new Map()); // Map<studentId, triScore>
+  const [triScores, setTriScores] = useState<Map<string, number>>(new Map()); // Map<studentId, triScore> - média geral
+  const [triScoresByArea, setTriScoresByArea] = useState<Map<string, Record<string, number>>>(new Map()); // Map<studentId, {LC: number, CH: number, CN: number, MT: number}>
   const [triScoresCount, setTriScoresCount] = useState<number>(0); // Contador para forçar atualização do React
   const [mainActiveTab, setMainActiveTab] = useState<string>("alunos"); // Aba principal: alunos, gabarito, tri, tct, conteudos
   
@@ -233,8 +234,10 @@ export default function Home() {
       // Nota TCT: score está em porcentagem (0-100), converter para 0,0 a 10,0
       // Cada área tem nota individual de 0,0 a 10,0, e a nota final é a média (também 0,0 a 10,0)
       const notaTCT = student.score ? parseFloat((student.score / 10).toFixed(1)) : 0;
-      // Notas por área (LC, CH, CN, MT)
+      // Notas TCT por área (LC, CH, CN, MT)
       const areaScores = student.areaScores || {};
+      // Notas TRI por área (LC, CH, CN, MT)
+      const triAreaScores = triScoresByArea.get(student.id) || {};
       return {
         matricula: student.studentNumber,
         nome: student.studentName,
@@ -243,10 +246,14 @@ export default function Home() {
         erros: student.wrongAnswers || 0,
         nota: notaTCT, // Nota TCT de 0,0 a 10,0 (média)
         triScore: triScoreFormatted,
-        lc: areaScores.LC !== undefined ? parseFloat(areaScores.LC.toFixed(1)) : null,
-        ch: areaScores.CH !== undefined ? parseFloat(areaScores.CH.toFixed(1)) : null,
-        cn: areaScores.CN !== undefined ? parseFloat(areaScores.CN.toFixed(1)) : null,
-        mt: areaScores.MT !== undefined ? parseFloat(areaScores.MT.toFixed(1)) : null,
+        lc: areaScores.LC !== undefined ? parseFloat(areaScores.LC.toFixed(1)) : null, // TCT
+        ch: areaScores.CH !== undefined ? parseFloat(areaScores.CH.toFixed(1)) : null, // TCT
+        cn: areaScores.CN !== undefined ? parseFloat(areaScores.CN.toFixed(1)) : null, // TCT
+        mt: areaScores.MT !== undefined ? parseFloat(areaScores.MT.toFixed(1)) : null, // TCT
+        triLc: triAreaScores.LC !== undefined ? parseFloat(triAreaScores.LC.toFixed(1)) : null, // TRI
+        triCh: triAreaScores.CH !== undefined ? parseFloat(triAreaScores.CH.toFixed(1)) : null, // TRI
+        triCn: triAreaScores.CN !== undefined ? parseFloat(triAreaScores.CN.toFixed(1)) : null, // TRI
+        triMt: triAreaScores.MT !== undefined ? parseFloat(triAreaScores.MT.toFixed(1)) : null, // TRI
       };
     });
     
@@ -640,6 +647,7 @@ export default function Home() {
     setAnswerKey([]);
     setQuestionContents([]);
     setTriScores(new Map());
+    setTriScoresByArea(new Map());
     setTriScoresCount(0);
     setMainActiveTab("alunos");
   };
@@ -816,9 +824,11 @@ export default function Home() {
   };
 
   // Função para calcular TRI automaticamente para todas as áreas
-  const calculateTRIForAllAreas = async (areas: Array<{ area: string; start: number; end: number }>, ano: number = 2023): Promise<Map<string, number>> => {
-    if (studentsWithScores.length === 0 || answerKey.length === 0) {
-      console.error("[TRI] Erro: studentsWithScores.length =", studentsWithScores.length, "answerKey.length =", answerKey.length);
+  const calculateTRIForAllAreas = async (areas: Array<{ area: string; start: number; end: number }>, ano: number = 2023, currentAnswerKey?: string[]): Promise<Map<string, number>> => {
+    const answerKeyToUse = currentAnswerKey || answerKey;
+    
+    if (studentsWithScores.length === 0 || answerKeyToUse.length === 0) {
+      console.error("[TRI] Erro: studentsWithScores.length =", studentsWithScores.length, "answerKey.length =", answerKeyToUse.length);
       return new Map<string, number>(); // Retornar Map vazio em vez de undefined
     }
 
@@ -826,11 +836,11 @@ export default function Home() {
 
     // Calcular estatísticas das questões manualmente
     const questionStatsForTRI: Array<{ questionNumber: number; correctPercentage: number }> = [];
-    for (let qIndex = 0; qIndex < answerKey.length; qIndex++) {
+    for (let qIndex = 0; qIndex < answerKeyToUse.length; qIndex++) {
       let correctCount = 0;
       studentsWithScores.forEach(student => {
-        if (student.answers[qIndex] && answerKey[qIndex] && 
-            student.answers[qIndex].toUpperCase() === answerKey[qIndex].toUpperCase()) {
+        if (student.answers[qIndex] && answerKeyToUse[qIndex] && 
+            student.answers[qIndex].toUpperCase() === answerKeyToUse[qIndex].toUpperCase()) {
           correctCount++;
         }
       });
@@ -844,13 +854,14 @@ export default function Home() {
     }
 
     const triScoresMap = new Map<string, { sum: number; count: number }>();
+    const triScoresByAreaMap = new Map<string, Record<string, number>>(); // Map<studentId, {LC: number, CH: number, CN: number, MT: number}>
 
     for (const { area, start, end } of areas) {
       try {
         // Filtrar alunos e questões para esta área
         const studentsForArea = studentsWithScores.map(student => {
           const answersForArea = student.answers.slice(start - 1, end);
-          const answerKeyForArea = answerKey.slice(start - 1, end);
+          const answerKeyForArea = answerKeyToUse.slice(start - 1, end);
           
           let correctCount = 0;
           answersForArea.forEach((answer, idx) => {
@@ -881,7 +892,7 @@ export default function Home() {
           correctPercentage: stat.correctPercentage,
         }));
 
-        const answerKeyForArea = answerKey.slice(start - 1, end);
+        const answerKeyForArea = answerKeyToUse.slice(start - 1, end);
 
         const response = await fetch("/api/calculate-tri", {
           method: "POST",
@@ -922,10 +933,17 @@ export default function Home() {
             
             if (result.triScore !== null && result.triScore !== undefined) {
               validResults++;
+              // Adicionar à média geral
               const currentData = triScoresMap.get(result.studentId) || { sum: 0, count: 0 };
               currentData.sum += result.triScore;
               currentData.count += 1;
               triScoresMap.set(result.studentId, currentData);
+              
+              // Armazenar nota TRI por área
+              const areaData = triScoresByAreaMap.get(result.studentId) || {};
+              areaData[area] = result.triScore;
+              triScoresByAreaMap.set(result.studentId, areaData);
+              
               console.log(`[TRI] Área ${area}: ✅ studentId ${result.studentId} adicionado ao Map com triScore=${result.triScore.toFixed(1)}`);
               console.log(`[TRI] Área ${area}: Map agora tem ${triScoresMap.size} entradas`);
             } else {
@@ -956,6 +974,7 @@ export default function Home() {
     // Criar um novo Map para forçar o React a detectar a mudança
     const newTriScoresMap = new Map(finalTriScores);
     setTriScores(newTriScoresMap);
+    setTriScoresByArea(new Map(triScoresByAreaMap)); // Armazenar notas TRI por área
     setTriScoresCount(newTriScoresMap.size); // Atualizar contador para forçar re-render
     
     console.log("[TRI] Scores calculados:", newTriScoresMap.size, "alunos");
@@ -973,7 +992,7 @@ export default function Home() {
     return newTriScoresMap;
   };
 
-  const handleApplyAnswerKey = async () => {
+  const handleApplyAnswerKey = async (): Promise<string[] | null> => {
     // Extrair respostas dos conteúdos cadastrados
     const answersFromContents = questionContents
       .slice(0, numQuestions)
@@ -986,7 +1005,7 @@ export default function Home() {
         description: `Cadastre pelo menos uma resposta válida (${validAnswers.join(", ")}) nas questões acima.`,
         variant: "destructive",
       });
-      return;
+      return null;
     }
     
     // Garantir que temos respostas para todas as questões
@@ -1014,7 +1033,7 @@ export default function Home() {
         description: `Nenhuma resposta válida encontrada. Selecione letras válidas (${validAnswers.join(", ")}) nas questões.`,
         variant: "destructive",
       });
-      return;
+      return null;
     }
     
     setAnswerKey(finalAnswers);
@@ -1025,21 +1044,12 @@ export default function Home() {
       title: "Gabarito aplicado",
       description: `${validAnswersCount} respostas configuradas${contentsCount > 0 ? `, ${contentsCount} com conteúdo cadastrado` : ""}.`,
     });
+    
+    return finalAnswers; // Retornar o gabarito aplicado
   };
 
   const handleCalculateTRI = async () => {
-    // Primeiro aplicar o gabarito se ainda não foi aplicado
-    if (answerKey.length === 0) {
-      await handleApplyAnswerKey();
-    }
-    
-    // Validações rigorosas
-    console.log("[TRI] Validação inicial:");
-    console.log("  - students.length:", students.length);
-    console.log("  - studentsWithScores.length:", studentsWithScores.length);
-    console.log("  - answerKey.length:", answerKey.length);
-    console.log("  - questionContents.length:", questionContents.length);
-    
+    // Validações iniciais antes de aplicar o gabarito
     if (students.length === 0) {
       toast({
         title: "Dados insuficientes",
@@ -1058,7 +1068,42 @@ export default function Home() {
       return;
     }
     
+    // Aplicar o gabarito se ainda não foi aplicado
+    let finalAnswerKey = answerKey;
     if (answerKey.length === 0) {
+      // Se não tem gabarito configurado, tentar aplicar
+      if (questionContents.length === 0) {
+        toast({
+          title: "Gabarito não configurado",
+          description: "Configure o gabarito antes de calcular o TRI.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Aplicar o gabarito e obter o resultado diretamente
+      const appliedAnswerKey = await handleApplyAnswerKey();
+      
+      if (!appliedAnswerKey || appliedAnswerKey.length === 0) {
+        toast({
+          title: "Gabarito não configurado",
+          description: "Não foi possível aplicar o gabarito. Verifique as configurações.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      finalAnswerKey = appliedAnswerKey;
+    }
+    
+    // Validações após aplicar o gabarito
+    console.log("[TRI] Validação após aplicar gabarito:");
+    console.log("  - students.length:", students.length);
+    console.log("  - studentsWithScores.length:", studentsWithScores.length);
+    console.log("  - answerKey.length:", answerKey.length);
+    console.log("  - questionContents.length:", questionContents.length);
+    
+    if (finalAnswerKey.length === 0) {
       toast({
         title: "Gabarito não configurado",
         description: "Configure o gabarito antes de calcular o TRI.",
@@ -1598,7 +1643,7 @@ export default function Home() {
               <FileSpreadsheet className="h-6 w-6 text-primary" />
             </div>
             <h1 className="text-xl font-semibold" data-testid="text-app-title">
-              Leitor de Gabarito ENEM
+              GabaritAI
             </h1>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -2694,10 +2739,14 @@ export default function Home() {
                             <TableHead className="w-24 text-center font-semibold text-xs uppercase tracking-wide">Acertos</TableHead>
                             {selectedTemplate.name.includes("ENEM") && (
                               <>
-                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">LC</TableHead>
-                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">CH</TableHead>
-                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">CN</TableHead>
-                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">MT</TableHead>
+                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">LC TCT</TableHead>
+                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">CH TCT</TableHead>
+                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">CN TCT</TableHead>
+                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">MT TCT</TableHead>
+                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">LC TRI</TableHead>
+                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">CH TRI</TableHead>
+                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">CN TRI</TableHead>
+                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">MT TRI</TableHead>
                               </>
                             )}
                             <TableHead className="w-24 text-center font-semibold text-xs uppercase tracking-wide bg-green-50 dark:bg-green-950">TCT</TableHead>
@@ -2731,6 +2780,7 @@ export default function Home() {
                                 </TableCell>
                                 {selectedTemplate.name.includes("ENEM") && (
                                   <>
+                                    {/* TCT por área */}
                                     <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
                                       {student.lc !== null && student.lc !== undefined ? (
                                         <span className="font-semibold text-blue-600 dark:text-blue-400">
@@ -2767,6 +2817,43 @@ export default function Home() {
                                         <span className="text-muted-foreground text-sm">-</span>
                                       )}
                                     </TableCell>
+                                    {/* TRI por área */}
+                                    <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
+                                      {student.triLc !== null && student.triLc !== undefined ? (
+                                        <span className="font-semibold text-purple-600 dark:text-purple-400">
+                                          {student.triLc.toFixed(1)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground text-sm">-</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
+                                      {student.triCh !== null && student.triCh !== undefined ? (
+                                        <span className="font-semibold text-purple-600 dark:text-purple-400">
+                                          {student.triCh.toFixed(1)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground text-sm">-</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
+                                      {student.triCn !== null && student.triCn !== undefined ? (
+                                        <span className="font-semibold text-purple-600 dark:text-purple-400">
+                                          {student.triCn.toFixed(1)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground text-sm">-</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
+                                      {student.triMt !== null && student.triMt !== undefined ? (
+                                        <span className="font-semibold text-purple-600 dark:text-purple-400">
+                                          {student.triMt.toFixed(1)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground text-sm">-</span>
+                                      )}
+                                    </TableCell>
                                   </>
                                 )}
                                 <TableCell className="text-center bg-green-50/50 dark:bg-green-950/50">
@@ -2789,7 +2876,7 @@ export default function Home() {
                             );
                           }) || (
                             <TableRow>
-                              <TableCell colSpan={selectedTemplate.name.includes("ENEM") ? 11 : 7} className="text-center py-8 text-muted-foreground">
+                              <TableCell colSpan={selectedTemplate.name.includes("ENEM") ? 15 : 7} className="text-center py-8 text-muted-foreground">
                                 Nenhum dado disponível. Processe um PDF e configure o gabarito primeiro.
                               </TableCell>
                             </TableRow>

@@ -1,4 +1,4 @@
-# 📝 Leitor de Gabarito ENEM - XTRI
+# 📝 GabaritAI - XTRI
 
 Sistema completo para leitura automática de gabaritos do ENEM e outras provas, com extração de dados via OMR (Optical Mark Recognition), correção automática e exportação para Excel.
 

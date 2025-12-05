@@ -66,7 +66,7 @@
 
 ## Navigation Structure
 Simple single-page application:
-- Header with logo/title: "Leitor de Gabarito ENEM"
+- Header with logo/title: "GabaritAI"
 - No complex navigation needed
 - Optional help/info icon linking to usage instructions
 

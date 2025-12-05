@@ -1,4 +1,4 @@
-# Leitor de Gabarito ENEM
+# GabaritAI
 
 Sistema para leitura automática de gabaritos do ENEM a partir de arquivos PDF, com extração de dados dos alunos via OMR (Optical Mark Recognition), correção automática e exportação para Excel.
 

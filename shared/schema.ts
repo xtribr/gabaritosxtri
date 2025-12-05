@@ -144,11 +144,15 @@ export const examStatisticsSchema = z.object({
     acertos: z.number(),
     erros: z.number(),
     nota: z.number(),
-    triScore: z.number().nullable().optional(),
-    lc: z.number().nullable().optional(), // Nota Linguagens
-    ch: z.number().nullable().optional(), // Nota Humanas
-    cn: z.number().nullable().optional(), // Nota Natureza
-    mt: z.number().nullable().optional(), // Nota Matemática
+        triScore: z.number().nullable().optional(),
+        lc: z.number().nullable().optional(), // Nota TCT Linguagens
+        ch: z.number().nullable().optional(), // Nota TCT Humanas
+        cn: z.number().nullable().optional(), // Nota TCT Natureza
+        mt: z.number().nullable().optional(), // Nota TCT Matemática
+        triLc: z.number().nullable().optional(), // Nota TRI Linguagens
+        triCh: z.number().nullable().optional(), // Nota TRI Humanas
+        triCn: z.number().nullable().optional(), // Nota TRI Natureza
+        triMt: z.number().nullable().optional(), // Nota TRI Matemática
   })).optional(),
   turmaStats: z.array(z.object({
     turma: z.string(),
