@@ -2866,10 +2866,10 @@ export default function Home() {
                                     <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
                                       {student.lc !== null && student.lc !== undefined ? (
                                         <div className="flex flex-col items-center gap-0.5">
-                                          <span className="text-xs text-muted-foreground">{student.lcAcertos || 0} acertos</span>
                                           <span className="font-semibold text-blue-600 dark:text-blue-400">
                                             {student.lc.toFixed(1)}
                                           </span>
+                                          <span className="text-xs text-muted-foreground">{student.lcAcertos || 0} acertos</span>
                                         </div>
                                       ) : (
                                         <span className="text-muted-foreground text-sm">-</span>
@@ -2878,10 +2878,10 @@ export default function Home() {
                                     <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
                                       {student.ch !== null && student.ch !== undefined ? (
                                         <div className="flex flex-col items-center gap-0.5">
-                                          <span className="text-xs text-muted-foreground">{student.chAcertos || 0} acertos</span>
                                           <span className="font-semibold text-blue-600 dark:text-blue-400">
                                             {student.ch.toFixed(1)}
                                           </span>
+                                          <span className="text-xs text-muted-foreground">{student.chAcertos || 0} acertos</span>
                                         </div>
                                       ) : (
                                         <span className="text-muted-foreground text-sm">-</span>
@@ -2890,10 +2890,10 @@ export default function Home() {
                                     <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
                                       {student.cn !== null && student.cn !== undefined ? (
                                         <div className="flex flex-col items-center gap-0.5">
-                                          <span className="text-xs text-muted-foreground">{student.cnAcertos || 0} acertos</span>
                                           <span className="font-semibold text-blue-600 dark:text-blue-400">
                                             {student.cn.toFixed(1)}
                                           </span>
+                                          <span className="text-xs text-muted-foreground">{student.cnAcertos || 0} acertos</span>
                                         </div>
                                       ) : (
                                         <span className="text-muted-foreground text-sm">-</span>
@@ -2902,10 +2902,10 @@ export default function Home() {
                                     <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
                                       {student.mt !== null && student.mt !== undefined ? (
                                         <div className="flex flex-col items-center gap-0.5">
-                                          <span className="text-xs text-muted-foreground">{student.mtAcertos || 0} acertos</span>
                                           <span className="font-semibold text-blue-600 dark:text-blue-400">
                                             {student.mt.toFixed(1)}
                                           </span>
+                                          <span className="text-xs text-muted-foreground">{student.mtAcertos || 0} acertos</span>
                                         </div>
                                       ) : (
                                         <span className="text-muted-foreground text-sm">-</span>
@@ -2916,10 +2916,10 @@ export default function Home() {
                                     <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
                                       {student.triLc !== null && student.triLc !== undefined ? (
                                         <div className="flex flex-col items-center gap-0.5">
-                                          <span className="text-xs text-muted-foreground">{student.lcAcertos || 0} acertos</span>
                                           <span className="font-semibold text-purple-600 dark:text-purple-400">
                                             {student.triLc.toFixed(1)}
                                           </span>
+                                          <span className="text-xs text-muted-foreground">{student.lcAcertos || 0} acertos</span>
                                         </div>
                                       ) : (
                                         <span className="text-muted-foreground text-sm">-</span>
@@ -2928,10 +2928,10 @@ export default function Home() {
                                     <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
                                       {student.triCh !== null && student.triCh !== undefined ? (
                                         <div className="flex flex-col items-center gap-0.5">
-                                          <span className="text-xs text-muted-foreground">{student.chAcertos || 0} acertos</span>
                                           <span className="font-semibold text-purple-600 dark:text-purple-400">
                                             {student.triCh.toFixed(1)}
                                           </span>
+                                          <span className="text-xs text-muted-foreground">{student.chAcertos || 0} acertos</span>
                                         </div>
                                       ) : (
                                         <span className="text-muted-foreground text-sm">-</span>
@@ -2940,10 +2940,10 @@ export default function Home() {
                                     <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
                                       {student.triCn !== null && student.triCn !== undefined ? (
                                         <div className="flex flex-col items-center gap-0.5">
-                                          <span className="text-xs text-muted-foreground">{student.cnAcertos || 0} acertos</span>
                                           <span className="font-semibold text-purple-600 dark:text-purple-400">
                                             {student.triCn.toFixed(1)}
                                           </span>
+                                          <span className="text-xs text-muted-foreground">{student.cnAcertos || 0} acertos</span>
                                         </div>
                                       ) : (
                                         <span className="text-muted-foreground text-sm">-</span>
@@ -2952,10 +2952,10 @@ export default function Home() {
                                     <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
                                       {student.triMt !== null && student.triMt !== undefined ? (
                                         <div className="flex flex-col items-center gap-0.5">
-                                          <span className="text-xs text-muted-foreground">{student.mtAcertos || 0} acertos</span>
                                           <span className="font-semibold text-purple-600 dark:text-purple-400">
                                             {student.triMt.toFixed(1)}
                                           </span>
+                                          <span className="text-xs text-muted-foreground">{student.mtAcertos || 0} acertos</span>
                                         </div>
                                       ) : (
                                         <span className="text-muted-foreground text-sm">-</span>
