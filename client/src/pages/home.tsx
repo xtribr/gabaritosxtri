@@ -1021,6 +1021,8 @@ export default function Home() {
     
     console.log("[TRI] Scores calculados:", newTriScoresMap.size, "alunos");
     console.log("[TRI] Detalhes dos scores:", Array.from(newTriScoresMap.entries()));
+    console.log("[TRI] triScoresByAreaMap size:", triScoresByAreaMap.size);
+    console.log("[TRI] triScoresByAreaMap detalhes:", Array.from(triScoresByAreaMap.entries()));
     
     // Se não há scores, logar detalhes para debug
     if (newTriScoresMap.size === 0) {
