@@ -241,6 +241,8 @@ export default function Home() {
       const areaScores = student.areaScores || {};
       // Notas TRI por área (LC, CH, CN, MT)
       const triAreaScores = triScoresByArea.get(student.id) || {};
+      // Acertos por área
+      const areaCorrectAnswers = student.areaCorrectAnswers || {};
       return {
         matricula: student.studentNumber,
         nome: student.studentName,
@@ -257,6 +259,10 @@ export default function Home() {
         triCh: triAreaScores.CH !== undefined ? parseFloat(triAreaScores.CH.toFixed(1)) : null, // TRI
         triCn: triAreaScores.CN !== undefined ? parseFloat(triAreaScores.CN.toFixed(1)) : null, // TRI
         triMt: triAreaScores.MT !== undefined ? parseFloat(triAreaScores.MT.toFixed(1)) : null, // TRI
+        lcAcertos: areaCorrectAnswers.LC || 0, // Acertos LC
+        chAcertos: areaCorrectAnswers.CH || 0, // Acertos CH
+        cnAcertos: areaCorrectAnswers.CN || 0, // Acertos CN
+        mtAcertos: areaCorrectAnswers.MT || 0, // Acertos MT
       };
     });
     
@@ -1266,10 +1272,13 @@ export default function Home() {
     }
   };
 
-  const handleCalculateTCT = () => {
+  const handleCalculateTCT = async () => {
     // Primeiro aplicar o gabarito se ainda não foi aplicado
-    if (answerKey.length === 0) {
-      handleApplyAnswerKey();
+    if (answerKey.length === 0 || answerKey.filter(a => a).length === 0) {
+      const applied = await handleApplyAnswerKey();
+      if (!applied) {
+        return; // handleApplyAnswerKey já mostra o toast de erro
+      }
     }
     
     if (studentsWithScores.length === 0) {
@@ -1290,6 +1299,7 @@ export default function Home() {
       // ENEM: calcular cada área separadamente (0,0 a 10,0) e fazer MÉDIA
       setStudents(prev => prev.map(student => {
         const areaScoresMap: Record<string, number> = {};
+        const areaCorrectAnswersMap: Record<string, number> = {};
         const areaScores: number[] = [];
         
         areas.forEach(({ area, start, end }) => {
@@ -1306,6 +1316,9 @@ export default function Home() {
               }
             }
           });
+          
+          // Armazenar acertos por área
+          areaCorrectAnswersMap[area] = correctCount;
           
           // Cada acerto vale 0,222 pontos (10,0 / 45 = 0,2222...)
           const areaScore = correctCount * 0.222;
@@ -1327,6 +1340,7 @@ export default function Home() {
           ...student,
           score: tctPercentage,
           areaScores: areaScoresMap, // Armazenar notas por área
+          areaCorrectAnswers: areaCorrectAnswersMap, // Armazenar acertos por área
         };
       }));
     } else {
@@ -2784,26 +2798,26 @@ export default function Home() {
                                 {/* Dia 1: LC e CH | Dia 2: CN e MT */}
                                 {(selectedTemplate.name === "ENEM - Dia 1" || !selectedTemplate.name.includes("Dia 2")) && (
                                   <>
-                                    <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">LC TCT</TableHead>
-                                    <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">CH TCT</TableHead>
+                                    <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">LC</TableHead>
+                                    <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">CH</TableHead>
                                   </>
                                 )}
                                 {selectedTemplate.name === "ENEM - Dia 2" && (
                                   <>
-                                    <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">CN TCT</TableHead>
-                                    <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">MT TCT</TableHead>
+                                    <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">CN</TableHead>
+                                    <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">MT</TableHead>
                                   </>
                                 )}
                                 {(selectedTemplate.name === "ENEM - Dia 1" || !selectedTemplate.name.includes("Dia 2")) && (
                                   <>
-                                    <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">LC TRI</TableHead>
-                                    <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">CH TRI</TableHead>
+                                    <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">LC TRI</TableHead>
+                                    <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">CH TRI</TableHead>
                                   </>
                                 )}
                                 {selectedTemplate.name === "ENEM - Dia 2" && (
                                   <>
-                                    <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">CN TRI</TableHead>
-                                    <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">MT TRI</TableHead>
+                                    <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">CN TRI</TableHead>
+                                    <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">MT TRI</TableHead>
                                   </>
                                 )}
                               </>
@@ -2845,9 +2859,12 @@ export default function Home() {
                                         {/* TCT por área - Linguagens */}
                                         <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
                                           {student.lc !== null && student.lc !== undefined ? (
-                                            <span className="font-semibold text-blue-600 dark:text-blue-400">
-                                              {student.lc.toFixed(1)}
-                                            </span>
+                                            <div className="flex flex-col items-center gap-0.5">
+                                              <span className="text-xs text-muted-foreground">{student.lcAcertos || 0} acertos</span>
+                                              <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                                TCT {student.lc.toFixed(1)}
+                                              </span>
+                                            </div>
                                           ) : (
                                             <span className="text-muted-foreground text-sm">-</span>
                                           )}
@@ -2855,9 +2872,12 @@ export default function Home() {
                                         {/* TCT por área - Humanas */}
                                         <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
                                           {student.ch !== null && student.ch !== undefined ? (
-                                            <span className="font-semibold text-blue-600 dark:text-blue-400">
-                                              {student.ch.toFixed(1)}
-                                            </span>
+                                            <div className="flex flex-col items-center gap-0.5">
+                                              <span className="text-xs text-muted-foreground">{student.chAcertos || 0} acertos</span>
+                                              <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                                TCT {student.ch.toFixed(1)}
+                                              </span>
+                                            </div>
                                           ) : (
                                             <span className="text-muted-foreground text-sm">-</span>
                                           )}
@@ -2869,9 +2889,12 @@ export default function Home() {
                                         {/* TCT por área - Ciências da Natureza */}
                                         <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
                                           {student.cn !== null && student.cn !== undefined ? (
-                                            <span className="font-semibold text-blue-600 dark:text-blue-400">
-                                              {student.cn.toFixed(1)}
-                                            </span>
+                                            <div className="flex flex-col items-center gap-0.5">
+                                              <span className="text-xs text-muted-foreground">{student.cnAcertos || 0} acertos</span>
+                                              <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                                TCT {student.cn.toFixed(1)}
+                                              </span>
+                                            </div>
                                           ) : (
                                             <span className="text-muted-foreground text-sm">-</span>
                                           )}
@@ -2879,9 +2902,12 @@ export default function Home() {
                                         {/* TCT por área - Matemática */}
                                         <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
                                           {student.mt !== null && student.mt !== undefined ? (
-                                            <span className="font-semibold text-blue-600 dark:text-blue-400">
-                                              {student.mt.toFixed(1)}
-                                            </span>
+                                            <div className="flex flex-col items-center gap-0.5">
+                                              <span className="text-xs text-muted-foreground">{student.mtAcertos || 0} acertos</span>
+                                              <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                                TCT {student.mt.toFixed(1)}
+                                              </span>
+                                            </div>
                                           ) : (
                                             <span className="text-muted-foreground text-sm">-</span>
                                           )}
@@ -2893,9 +2919,12 @@ export default function Home() {
                                         {/* TRI por área - Linguagens */}
                                         <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
                                           {student.triLc !== null && student.triLc !== undefined ? (
-                                            <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                              {student.triLc.toFixed(1)}
-                                            </span>
+                                            <div className="flex flex-col items-center gap-0.5">
+                                              <span className="text-xs text-muted-foreground">{student.lcAcertos || 0} acertos</span>
+                                              <span className="font-semibold text-purple-600 dark:text-purple-400">
+                                                TRI {student.triLc.toFixed(1)}
+                                              </span>
+                                            </div>
                                           ) : (
                                             <span className="text-muted-foreground text-sm">-</span>
                                           )}
@@ -2903,9 +2932,12 @@ export default function Home() {
                                         {/* TRI por área - Humanas */}
                                         <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
                                           {student.triCh !== null && student.triCh !== undefined ? (
-                                            <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                              {student.triCh.toFixed(1)}
-                                            </span>
+                                            <div className="flex flex-col items-center gap-0.5">
+                                              <span className="text-xs text-muted-foreground">{student.chAcertos || 0} acertos</span>
+                                              <span className="font-semibold text-purple-600 dark:text-purple-400">
+                                                TRI {student.triCh.toFixed(1)}
+                                              </span>
+                                            </div>
                                           ) : (
                                             <span className="text-muted-foreground text-sm">-</span>
                                           )}
@@ -2917,9 +2949,12 @@ export default function Home() {
                                         {/* TRI por área - Ciências da Natureza */}
                                         <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
                                           {student.triCn !== null && student.triCn !== undefined ? (
-                                            <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                              {student.triCn.toFixed(1)}
-                                            </span>
+                                            <div className="flex flex-col items-center gap-0.5">
+                                              <span className="text-xs text-muted-foreground">{student.cnAcertos || 0} acertos</span>
+                                              <span className="font-semibold text-purple-600 dark:text-purple-400">
+                                                TRI {student.triCn.toFixed(1)}
+                                              </span>
+                                            </div>
                                           ) : (
                                             <span className="text-muted-foreground text-sm">-</span>
                                           )}
@@ -2927,9 +2962,12 @@ export default function Home() {
                                         {/* TRI por área - Matemática */}
                                         <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
                                           {student.triMt !== null && student.triMt !== undefined ? (
-                                            <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                              {student.triMt.toFixed(1)}
-                                            </span>
+                                            <div className="flex flex-col items-center gap-0.5">
+                                              <span className="text-xs text-muted-foreground">{student.mtAcertos || 0} acertos</span>
+                                              <span className="font-semibold text-purple-600 dark:text-purple-400">
+                                                TRI {student.triMt.toFixed(1)}
+                                              </span>
+                                            </div>
                                           ) : (
                                             <span className="text-muted-foreground text-sm">-</span>
                                           )}
