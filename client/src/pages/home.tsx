@@ -2448,92 +2448,9 @@ export default function Home() {
               </CardHeader>
               {pagePreviews.length > 0 && (
                 <CardContent className="pt-0">
-                  {/* Visualização da primeira página com overlay verde (apenas para ENEM90) */}
-                  {pagePreviews.length > 0 && selectedTemplate.name.includes("ENEM") && selectedTemplate.totalQuestions === 90 && (
-                    <div className="mb-6">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-4 h-4 bg-green-500 rounded border-2 border-green-700"></div>
-                          <span className="text-sm font-medium">Áreas de Leitura OMR (Primeira Página)</span>
-                        </div>
-                        <Badge variant="outline" className="text-xs">
-                          Página 1
-                        </Badge>
-                      </div>
-                      <div className="relative border-2 border-green-500 rounded-lg overflow-hidden bg-muted">
-                        <div className="relative" style={{ aspectRatio: '3/4', maxHeight: '600px' }}>
-                          <img
-                            src={pagePreviews[0].imageUrl}
-                            alt="Página 1 com overlay OMR"
-                            className="w-full h-full object-contain"
-                          />
-                          {/* Overlay SVG com quadrados verdes */}
-                          <svg
-                            className="absolute inset-0 w-full h-full pointer-events-none"
-                            style={{ imageRendering: 'pixelated' }}
-                            viewBox="0 0 1240 1756"
-                            preserveAspectRatio="xMidYMid meet"
-                          >
-                            {(() => {
-                              // COORDENADAS CALIBRADAS v4.0 ESCALADAS (5 DEZ 2025)
-                              // Calibração detectada automaticamente por HoughCircles - VERIFICADA VISUALMENTE
-                              // Escaladas para tamanho real: 1240x1756px (scale: 1.161x, 1.172y)
-                              const y_coords = [1212, 1240, 1269, 1300, 1330, 1358, 1389, 1419, 1449, 1478, 1507, 1536, 1567, 1596, 1625];
-                              
-                              const blocos_x = [
-                                [103, 132, 164, 195, 224],      // Bloco 1: Q01-Q15
-                                [294, 323, 353, 383, 413],      // Bloco 2: Q16-Q30
-                                [483, 513, 543, 574, 604],     // Bloco 3: Q31-Q45
-                                [673, 702, 732, 763, 794],     // Bloco 4: Q46-Q60
-                                [864, 893, 923, 954, 983],     // Bloco 5: Q61-Q75
-                                [1052, 1081, 1111, 1142, 1173]  // Bloco 6: Q76-Q90
-                              ];
-                              
-                              const bubble_radius = 13; // Raio calibrado (v4.0 escalado)
-                              const bubble_diameter = 26; // Diâmetro
-                              
-                              const squares: JSX.Element[] = [];
-                              
-                              // Desenhar quadrados para todas as 90 questões
-                              for (let q = 1; q <= 90; q++) {
-                                const col = Math.floor((q - 1) / 15);
-                                const row = (q - 1) % 15;
-                                const y = y_coords[row]; // Usar coordenadas Y calibradas
-                                const x_positions = blocos_x[col]; // Usar coordenadas X calibradas por bloco
-                                
-                                // Desenhar quadrado para cada opção (A, B, C, D, E)
-                                for (let opt = 0; opt < 5; opt++) {
-                                  const x = x_positions[opt];
-                                  squares.push(
-                                    <rect
-                                      key={`q${q}-opt${opt}`}
-                                      x={x - bubble_radius}
-                                      y={y - bubble_radius}
-                                      width={bubble_diameter}
-                                      height={bubble_diameter}
-                                      fill="rgba(34, 197, 94, 0.5)"
-                                      stroke="rgb(22, 163, 74)"
-                                      strokeWidth="1.5"
-                                      rx="2"
-                                    />
-                                  );
-                                }
-                              }
-                              
-                              return squares;
-                            })()}
-                          </svg>
-                        </div>
-                        <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                          Quadrados verdes = Onde o OMR está lendo
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Grid de previews das outras páginas */}
+                  {/* Grid de previews das páginas */}
                   <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
-                    {pagePreviews.slice(1).map((preview) => (
+                    {pagePreviews.map((preview) => (
                       <div
                         key={preview.pageNumber}
                         className="relative aspect-[3/4] rounded-md overflow-hidden border bg-muted"
@@ -2847,7 +2764,9 @@ export default function Home() {
                       Notas e Scores dos Alunos
                     </CardTitle>
                     <CardDescription>
-                      Visualização completa das notas TCT (0,0 a 10,0) e TRI (0-1000) por aluno e por área
+                      Visualização completa das notas TCT (0,0 a 10,0) e TRI (0-1000) por aluno e por área.
+                      {selectedTemplate.name === "ENEM - Dia 1" && " Dia 1: Linguagens (LC) e Humanas (CH)."}
+                      {selectedTemplate.name === "ENEM - Dia 2" && " Dia 2: Ciências da Natureza (CN) e Matemática (MT)."}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -2862,14 +2781,31 @@ export default function Home() {
                             <TableHead className="w-24 text-center font-semibold text-xs uppercase tracking-wide">Acertos</TableHead>
                             {selectedTemplate.name.includes("ENEM") && (
                               <>
-                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">LC TCT</TableHead>
-                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">CH TCT</TableHead>
-                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">CN TCT</TableHead>
-                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">MT TCT</TableHead>
-                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">LC TRI</TableHead>
-                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">CH TRI</TableHead>
-                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">CN TRI</TableHead>
-                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">MT TRI</TableHead>
+                                {/* Dia 1: LC e CH | Dia 2: CN e MT */}
+                                {(selectedTemplate.name === "ENEM - Dia 1" || !selectedTemplate.name.includes("Dia 2")) && (
+                                  <>
+                                    <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">LC TCT</TableHead>
+                                    <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">CH TCT</TableHead>
+                                  </>
+                                )}
+                                {selectedTemplate.name === "ENEM - Dia 2" && (
+                                  <>
+                                    <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">CN TCT</TableHead>
+                                    <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">MT TCT</TableHead>
+                                  </>
+                                )}
+                                {(selectedTemplate.name === "ENEM - Dia 1" || !selectedTemplate.name.includes("Dia 2")) && (
+                                  <>
+                                    <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">LC TRI</TableHead>
+                                    <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">CH TRI</TableHead>
+                                  </>
+                                )}
+                                {selectedTemplate.name === "ENEM - Dia 2" && (
+                                  <>
+                                    <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">CN TRI</TableHead>
+                                    <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">MT TRI</TableHead>
+                                  </>
+                                )}
                               </>
                             )}
                             <TableHead className="w-24 text-center font-semibold text-xs uppercase tracking-wide bg-green-50 dark:bg-green-950">TCT</TableHead>
@@ -2903,80 +2839,103 @@ export default function Home() {
                                 </TableCell>
                                 {selectedTemplate.name.includes("ENEM") && (
                                   <>
-                                    {/* TCT por área */}
-                                    <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
-                                      {student.lc !== null && student.lc !== undefined ? (
-                                        <span className="font-semibold text-blue-600 dark:text-blue-400">
-                                          {student.lc.toFixed(1)}
-                                        </span>
-                                      ) : (
-                                        <span className="text-muted-foreground text-sm">-</span>
-                                      )}
-                                    </TableCell>
-                                    <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
-                                      {student.ch !== null && student.ch !== undefined ? (
-                                        <span className="font-semibold text-blue-600 dark:text-blue-400">
-                                          {student.ch.toFixed(1)}
-                                        </span>
-                                      ) : (
-                                        <span className="text-muted-foreground text-sm">-</span>
-                                      )}
-                                    </TableCell>
-                                    <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
-                                      {student.cn !== null && student.cn !== undefined ? (
-                                        <span className="font-semibold text-blue-600 dark:text-blue-400">
-                                          {student.cn.toFixed(1)}
-                                        </span>
-                                      ) : (
-                                        <span className="text-muted-foreground text-sm">-</span>
-                                      )}
-                                    </TableCell>
-                                    <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
-                                      {student.mt !== null && student.mt !== undefined ? (
-                                        <span className="font-semibold text-blue-600 dark:text-blue-400">
-                                          {student.mt.toFixed(1)}
-                                        </span>
-                                      ) : (
-                                        <span className="text-muted-foreground text-sm">-</span>
-                                      )}
-                                    </TableCell>
-                                    {/* TRI por área */}
-                                    <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
-                                      {student.triLc !== null && student.triLc !== undefined ? (
-                                        <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                          {student.triLc.toFixed(1)}
-                                        </span>
-                                      ) : (
-                                        <span className="text-muted-foreground text-sm">-</span>
-                                      )}
-                                    </TableCell>
-                                    <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
-                                      {student.triCh !== null && student.triCh !== undefined ? (
-                                        <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                          {student.triCh.toFixed(1)}
-                                        </span>
-                                      ) : (
-                                        <span className="text-muted-foreground text-sm">-</span>
-                                      )}
-                                    </TableCell>
-                                    <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
-                                      {student.triCn !== null && student.triCn !== undefined ? (
-                                        <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                          {student.triCn.toFixed(1)}
-                                        </span>
-                                      ) : (
-                                        <span className="text-muted-foreground text-sm">-</span>
-                                      )}
-                                    </TableCell>
-                                    <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
-                                      {student.triMt !== null && student.triMt !== undefined ? (
-                                        <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                          {student.triMt.toFixed(1)}
-                                        </span>
-                                      ) : (
-                                        <span className="text-muted-foreground text-sm">-</span>
-                                      )}
-                                    </TableCell>
+                                    {/* Dia 1: Mostrar LC e CH | Dia 2: Mostrar CN e MT */}
+                                    {(selectedTemplate.name === "ENEM - Dia 1" || !selectedTemplate.name.includes("Dia 2")) && (
+                                      <>
+                                        {/* TCT por área - Linguagens */}
+                                        <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
+                                          {student.lc !== null && student.lc !== undefined ? (
+                                            <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                              {student.lc.toFixed(1)}
+                                            </span>
+                                          ) : (
+                                            <span className="text-muted-foreground text-sm">-</span>
+                                          )}
+                                        </TableCell>
+                                        {/* TCT por área - Humanas */}
+                                        <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
+                                          {student.ch !== null && student.ch !== undefined ? (
+                                            <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                              {student.ch.toFixed(1)}
+                                            </span>
+                                          ) : (
+                                            <span className="text-muted-foreground text-sm">-</span>
+                                          )}
+                                        </TableCell>
+                                      </>
+                                    )}
+                                    {selectedTemplate.name === "ENEM - Dia 2" && (
+                                      <>
+                                        {/* TCT por área - Ciências da Natureza */}
+                                        <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
+                                          {student.cn !== null && student.cn !== undefined ? (
+                                            <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                              {student.cn.toFixed(1)}
+                                            </span>
+                                          ) : (
+                                            <span className="text-muted-foreground text-sm">-</span>
+                                          )}
+                                        </TableCell>
+                                        {/* TCT por área - Matemática */}
+                                        <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
+                                          {student.mt !== null && student.mt !== undefined ? (
+                                            <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                              {student.mt.toFixed(1)}
+                                            </span>
+                                          ) : (
+                                            <span className="text-muted-foreground text-sm">-</span>
+                                          )}
+                                        </TableCell>
+                                      </>
+                                    )}
+                                    {(selectedTemplate.name === "ENEM - Dia 1" || !selectedTemplate.name.includes("Dia 2")) && (
+                                      <>
+                                        {/* TRI por área - Linguagens */}
+                                        <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
+                                          {student.triLc !== null && student.triLc !== undefined ? (
+                                            <span className="font-semibold text-purple-600 dark:text-purple-400">
+                                              {student.triLc.toFixed(1)}
+                                            </span>
+                                          ) : (
+                                            <span className="text-muted-foreground text-sm">-</span>
+                                          )}
+                                        </TableCell>
+                                        {/* TRI por área - Humanas */}
+                                        <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
+                                          {student.triCh !== null && student.triCh !== undefined ? (
+                                            <span className="font-semibold text-purple-600 dark:text-purple-400">
+                                              {student.triCh.toFixed(1)}
+                                            </span>
+                                          ) : (
+                                            <span className="text-muted-foreground text-sm">-</span>
+                                          )}
+                                        </TableCell>
+                                      </>
+                                    )}
+                                    {selectedTemplate.name === "ENEM - Dia 2" && (
+                                      <>
+                                        {/* TRI por área - Ciências da Natureza */}
+                                        <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
+                                          {student.triCn !== null && student.triCn !== undefined ? (
+                                            <span className="font-semibold text-purple-600 dark:text-purple-400">
+                                              {student.triCn.toFixed(1)}
+                                            </span>
+                                          ) : (
+                                            <span className="text-muted-foreground text-sm">-</span>
+                                          )}
+                                        </TableCell>
+                                        {/* TRI por área - Matemática */}
+                                        <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
+                                          {student.triMt !== null && student.triMt !== undefined ? (
+                                            <span className="font-semibold text-purple-600 dark:text-purple-400">
+                                              {student.triMt.toFixed(1)}
+                                            </span>
+                                          ) : (
+                                            <span className="text-muted-foreground text-sm">-</span>
+                                          )}
+                                        </TableCell>
+                                      </>
+                                    )}
                                   </>
                                 )}
                                 <TableCell className="text-center bg-green-50/50 dark:bg-green-950/50">
