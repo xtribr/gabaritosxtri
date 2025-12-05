@@ -88,6 +88,7 @@ export default function Home() {
   const [questionContents, setQuestionContents] = useState<Array<{ questionNumber: number; answer: string; content: string }>>([]);
   const [answerKeyDialogOpen, setAnswerKeyDialogOpen] = useState(false);
   const [numQuestions, setNumQuestions] = useState<number>(45);
+  const [triScores, setTriScores] = useState<Map<string, number>>(new Map()); // Map<studentId, triScore>
   const [activeTab, setActiveTab] = useState<string>("students");
   
   const [selectedTemplateIndex, setSelectedTemplateIndex] = useState<number>(6);
@@ -226,14 +227,20 @@ export default function Home() {
     })).sort((a, b) => b.errorPercentage - a.errorPercentage);
     
     // Estatísticas por aluno (individual)
-    const studentStats = studentsWithScores.map(student => ({
-      matricula: student.studentNumber,
-      nome: student.studentName,
-      turma: extractTurmaFromStudent(student),
-      acertos: student.correctAnswers || 0,
-      erros: student.wrongAnswers || 0,
-      nota: student.score || 0,
-    }));
+    const studentStats = studentsWithScores.map(student => {
+      const triScore = triScores.get(student.id);
+      // TRI está em escala 0-1000, manter o valor original com 1 casa decimal
+      const triScoreFormatted = triScore !== undefined ? parseFloat(triScore.toFixed(1)) : null;
+      return {
+        matricula: student.studentNumber,
+        nome: student.studentName,
+        turma: extractTurmaFromStudent(student),
+        acertos: student.correctAnswers || 0,
+        erros: student.wrongAnswers || 0,
+        nota: student.score || 0,
+        triScore: triScoreFormatted,
+      };
+    });
     
     // Estatísticas por turma (agrupado)
     const turmaStatsMap = new Map<string, { alunos: typeof studentStats; totalAcertos: number; totalErros: number }>();
@@ -280,7 +287,7 @@ export default function Home() {
       studentStats: studentStats.length > 0 ? studentStats : undefined,
       turmaStats: turmaStats.length > 0 ? turmaStats : undefined,
     };
-  }, [studentsWithScores, answerKey, passingScore, questionContents]);
+  }, [studentsWithScores, answerKey, passingScore, questionContents, triScores]);
 
   const scoreDistribution = useMemo(() => {
     if (studentsWithScores.length === 0 || answerKey.length === 0) return [];
@@ -770,7 +777,127 @@ export default function Home() {
     });
   };
 
-  const handleApplyAnswerKey = () => {
+  // Função para detectar áreas baseado no template
+  const getAreasByTemplate = (templateName: string, numQuestions: number): Array<{ area: string; start: number; end: number }> => {
+    if (templateName === "ENEM - Dia 1") {
+      return [
+        { area: "LC", start: 1, end: 45 },   // Linguagens e Códigos
+        { area: "CH", start: 46, end: 90 },  // Ciências Humanas
+      ];
+    } else if (templateName === "ENEM - Dia 2") {
+      return [
+        { area: "CN", start: 91, end: 135 }, // Ciências da Natureza
+        { area: "MT", start: 136, end: 180 }, // Matemática
+      ];
+    } else if (templateName === "ENEM") {
+      return [
+        { area: "LC", start: 1, end: 45 },
+        { area: "CH", start: 46, end: 90 },
+        { area: "CN", start: 91, end: 135 },
+        { area: "MT", start: 136, end: 180 },
+      ];
+    }
+    return []; // Outros templates não têm áreas definidas
+  };
+
+  // Função para calcular TRI automaticamente para todas as áreas
+  const calculateTRIForAllAreas = async (areas: Array<{ area: string; start: number; end: number }>, ano: number = 2023) => {
+    if (studentsWithScores.length === 0 || answerKey.length === 0) return;
+
+    // Calcular estatísticas das questões manualmente
+    const questionStatsForTRI: Array<{ questionNumber: number; correctPercentage: number }> = [];
+    for (let qIndex = 0; qIndex < answerKey.length; qIndex++) {
+      let correctCount = 0;
+      studentsWithScores.forEach(student => {
+        if (student.answers[qIndex] && answerKey[qIndex] && 
+            student.answers[qIndex].toUpperCase() === answerKey[qIndex].toUpperCase()) {
+          correctCount++;
+        }
+      });
+      const correctPercentage = studentsWithScores.length > 0 
+        ? (correctCount / studentsWithScores.length) * 100 
+        : 0;
+      questionStatsForTRI.push({
+        questionNumber: qIndex + 1,
+        correctPercentage: Math.round(correctPercentage * 10) / 10,
+      });
+    }
+
+    const triScoresMap = new Map<string, { sum: number; count: number }>();
+
+    for (const { area, start, end } of areas) {
+      try {
+        // Filtrar alunos e questões para esta área
+        const studentsForArea = studentsWithScores.map(student => {
+          const answersForArea = student.answers.slice(start - 1, end);
+          const answerKeyForArea = answerKey.slice(start - 1, end);
+          
+          let correctCount = 0;
+          answersForArea.forEach((answer, idx) => {
+            if (answer && answerKeyForArea[idx] && answer.toUpperCase() === answerKeyForArea[idx].toUpperCase()) {
+              correctCount++;
+            }
+          });
+
+          return {
+            ...student,
+            answers: answersForArea,
+            correctAnswers: correctCount,
+          };
+        });
+
+        const questionStatsForArea = questionStatsForTRI.filter(stat => 
+          stat.questionNumber >= start && stat.questionNumber <= end
+        ).map(stat => ({
+          questionNumber: stat.questionNumber - start + 1, // Ajustar para começar em 1
+          correctPercentage: stat.correctPercentage,
+        }));
+
+        const answerKeyForArea = answerKey.slice(start - 1, end);
+
+        const response = await fetch("/api/calculate-tri", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            students: studentsForArea,
+            area: area,
+            ano: ano,
+            questionStats: questionStatsForArea,
+            answerKey: answerKeyForArea,
+          }),
+        });
+
+        if (response.ok) {
+          const { results } = await response.json();
+          results.forEach((result: any) => {
+            if (result.triScore !== null) {
+              const currentData = triScoresMap.get(result.studentId) || { sum: 0, count: 0 };
+              currentData.sum += result.triScore;
+              currentData.count += 1;
+              triScoresMap.set(result.studentId, currentData);
+            }
+          });
+        }
+      } catch (error) {
+        console.error(`[TRI] Erro ao calcular TRI para área ${area}:`, error);
+      }
+    }
+
+    // Converter para média final (soma/count) e salvar como Map<string, number>
+    const finalTriScores = new Map<string, number>();
+    triScoresMap.forEach((data, studentId) => {
+      if (data.count > 0) {
+        finalTriScores.set(studentId, data.sum / data.count);
+      }
+    });
+    
+    setTriScores(finalTriScores);
+    return finalTriScores;
+  };
+
+  const handleApplyAnswerKey = async () => {
     // Extrair respostas dos conteúdos cadastrados
     const answersFromContents = questionContents
       .slice(0, numQuestions)
@@ -816,12 +943,107 @@ export default function Home() {
     
     setAnswerKey(finalAnswers);
     setQuestionContents(finalContents);
-    setAnswerKeyDialogOpen(false);
     
     const contentsCount = finalContents.filter(c => c.content.trim()).length;
     toast({
       title: "Gabarito aplicado",
       description: `${validAnswersCount} respostas configuradas${contentsCount > 0 ? `, ${contentsCount} com conteúdo cadastrado` : ""}.`,
+    });
+  };
+
+  const handleCalculateTRI = async () => {
+    // Primeiro aplicar o gabarito se ainda não foi aplicado
+    if (answerKey.length === 0) {
+      await handleApplyAnswerKey();
+    }
+    
+    if (studentsWithScores.length === 0) {
+      toast({
+        title: "Dados insuficientes",
+        description: "Processe um PDF primeiro.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Se for ENEM, calcular TRI automaticamente para todas as áreas
+    const areas = getAreasByTemplate(selectedTemplate.name, numQuestions);
+    if (areas.length === 0) {
+      toast({
+        title: "Template não suportado",
+        description: "Cálculo TRI automático disponível apenas para templates ENEM.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setAnswerKeyDialogOpen(false);
+    
+    toast({
+      title: "Calculando TRI",
+      description: `Calculando notas TRI para ${areas.length} área(s)...`,
+    });
+
+    await calculateTRIForAllAreas(areas);
+
+    // Atualizar notas dos alunos com TRI
+    setStudents(prev => prev.map(student => {
+      const triScore = triScores.get(student.id);
+      if (triScore !== undefined) {
+        // Converter TRI (0-1000) para porcentagem (0-100)
+        const triPercentage = (triScore / 10);
+        return {
+          ...student,
+          score: triPercentage,
+        };
+      }
+      return student;
+    }));
+
+    toast({
+      title: "TRI calculado",
+      description: `Notas TRI calculadas para ${triScores.size} alunos.`,
+    });
+  };
+
+  const handleCalculateTCT = () => {
+    // Primeiro aplicar o gabarito se ainda não foi aplicado
+    if (answerKey.length === 0) {
+      handleApplyAnswerKey();
+    }
+    
+    if (studentsWithScores.length === 0) {
+      toast({
+        title: "Dados insuficientes",
+        description: "Processe um PDF primeiro.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setAnswerKeyDialogOpen(false);
+
+    // TCT: cada acerto vale um ponto, escala de 0,0 a 10,0
+    setStudents(prev => prev.map(student => {
+      const correctAnswers = student.correctAnswers || 0;
+      const totalQuestions = answerKey.length;
+      // Calcular nota de 0,0 a 10,0
+      const tctScore = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 10 : 0;
+      // Converter para porcentagem para manter compatibilidade (0-100)
+      const tctPercentage = (tctScore / 10) * 100;
+      
+      return {
+        ...student,
+        score: tctPercentage,
+      };
+    }));
+
+    // Limpar TRI scores quando usar TCT
+    setTriScores(new Map());
+
+    toast({
+      title: "Notas TCT calculadas",
+      description: `Notas calculadas na escala de 0,0 a 10,0 para ${studentsWithScores.length} alunos.`,
     });
   };
 
@@ -839,6 +1061,7 @@ export default function Home() {
       description: `${numQuestions} questões inicializadas. Preencha os números, respostas e conteúdos.`,
     });
   };
+
 
   const handleImportAnswerKey = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -1430,13 +1653,27 @@ export default function Home() {
                         </p>
                       </div>
                     </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setAnswerKeyDialogOpen(false)} data-testid="button-cancel-answer-key">
+                    <DialogFooter className="flex-col gap-2 sm:flex-row">
+                      <Button variant="outline" onClick={() => setAnswerKeyDialogOpen(false)} data-testid="button-cancel-answer-key" className="w-full sm:w-auto">
                         Cancelar
                       </Button>
-                      <Button onClick={handleApplyAnswerKey} data-testid="button-apply-answer-key">
+                      <Button 
+                        onClick={handleCalculateTRI} 
+                        variant="default"
+                        className="w-full sm:w-auto"
+                        data-testid="button-calculate-tri"
+                      >
+                        <BarChart3 className="h-4 w-4 mr-2" />
+                        Calcular por TRI Média
+                      </Button>
+                      <Button 
+                        onClick={handleCalculateTCT} 
+                        variant="default"
+                        className="w-full sm:w-auto"
+                        data-testid="button-calculate-tct"
+                      >
                         <Calculator className="h-4 w-4 mr-2" />
-                        Aplicar e Calcular Notas
+                        Calcular por TCT
                       </Button>
                     </DialogFooter>
                   </DialogContent>
@@ -2266,6 +2503,59 @@ export default function Home() {
                       </Card>
                     </div>
 
+                    {triScores.size > 0 && (
+                      <Card className="mb-4 border-blue-200 dark:border-blue-800">
+                        <CardHeader>
+                          <CardTitle className="text-base flex items-center gap-2">
+                            <BarChart3 className="h-5 w-5 text-blue-600" />
+                            Notas TRI Calculadas
+                          </CardTitle>
+                          <CardDescription>
+                            Notas calculadas usando Teoria de Resposta ao Item (TRI) com base na coerência das respostas
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                              <p className="text-sm text-muted-foreground">Média TRI</p>
+                              <p className="text-2xl font-bold text-blue-600">
+                                {(() => {
+                                  const scores = Array.from(triScores.values());
+                                  const avg = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+                                  return avg.toFixed(1);
+                                })()}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Maior TRI</p>
+                              <p className="text-2xl font-bold text-green-600">
+                                {(() => {
+                                  const scores = Array.from(triScores.values());
+                                  const max = scores.length > 0 ? Math.max(...scores) : 0;
+                                  return max.toFixed(1);
+                                })()}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Menor TRI</p>
+                              <p className="text-2xl font-bold text-red-600">
+                                {(() => {
+                                  const scores = Array.from(triScores.values());
+                                  const min = scores.length > 0 ? Math.min(...scores) : 0;
+                                  return min.toFixed(1);
+                                })()}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Alunos com TRI</p>
+                              <p className="text-2xl font-bold">
+                                {triScores.size}
+                              </p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
                     <div className="grid gap-4 md:grid-cols-2">
                       <Card data-testid="card-score-distribution">
                         <CardHeader>
@@ -2513,12 +2803,18 @@ export default function Home() {
                                   <TableHead>Turma</TableHead>
                                   <TableHead className="text-center">Acertos</TableHead>
                                   <TableHead className="text-center">Erros</TableHead>
-                                  <TableHead className="text-center">Nota</TableHead>
+                                  <TableHead className="text-center">Acerto - TRI</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
                                 {statistics.studentStats
-                                  .sort((a, b) => b.nota - a.nota)
+                                  .sort((a, b) => {
+                                    // Ordenar por TRI se disponível, senão por acertos
+                                    if (a.triScore !== null && a.triScore !== undefined && b.triScore !== null && b.triScore !== undefined) {
+                                      return b.triScore - a.triScore;
+                                    }
+                                    return b.acertos - a.acertos;
+                                  })
                                   .map((student, idx) => (
                                   <TableRow key={idx}>
                                     <TableCell className="font-mono text-sm">{student.matricula}</TableCell>
@@ -2531,11 +2827,13 @@ export default function Home() {
                                       {student.erros}
                                     </TableCell>
                                     <TableCell className="text-center">
-                                      <span className={`font-semibold ${
-                                        student.nota >= 60 ? "text-green-600" : "text-red-600"
-                                      }`}>
-                                        {student.nota.toFixed(1)}%
-                                      </span>
+                                      {student.triScore !== null && student.triScore !== undefined ? (
+                                        <span className="font-semibold text-blue-600">
+                                          {student.triScore.toFixed(1)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground text-sm">-</span>
+                                      )}
                                     </TableCell>
                                   </TableRow>
                                 ))}

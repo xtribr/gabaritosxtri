@@ -12,6 +12,12 @@ import archiver from "archiver";
 import type { StudentData, ExamStatistics } from "@shared/schema";
 import { officialGabaritoTemplate } from "@shared/schema";
 import { processOMRPage, extractTextRegion, preprocessForOCR } from "./omr";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Job storage for async PDF processing
 interface ProcessingJob {
@@ -1024,6 +1030,216 @@ export async function registerRoutes(
 
   app.get("/api/health", (req: Request, res: Response) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // TRI Data Cache
+  let triDataCache: Array<{
+    area: string;
+    acertos: number;
+    min: number;
+    max: number;
+    media: number;
+    ano: number;
+  }> | null = null;
+
+  // Load TRI data from CSV
+  const loadTRIData = async () => {
+    if (triDataCache) return triDataCache;
+
+    try {
+      const triFilePath = join(__dirname, "..", "tri", "TRI ENEM DE 2009 A 2023 MIN MED E MAX.csv");
+      const csvContent = readFileSync(triFilePath, "utf-8");
+      const lines = csvContent.split("\n").filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        throw new Error("CSV TRI vazio ou inválido");
+      }
+
+      const headers = lines[0].split(";").map(h => h.trim());
+      const areaIdx = headers.indexOf("area");
+      const acertosIdx = headers.indexOf("acertos");
+      const minIdx = headers.indexOf("min");
+      const maxIdx = headers.indexOf("max");
+      const mediaIdx = headers.indexOf("media");
+      const anoIdx = headers.indexOf("ano");
+
+      if (areaIdx === -1 || acertosIdx === -1 || mediaIdx === -1 || anoIdx === -1) {
+        throw new Error("Colunas obrigatórias não encontradas no CSV TRI");
+      }
+
+      triDataCache = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const values = line.split(";").map(v => v.trim());
+        const area = values[areaIdx];
+        const acertos = parseInt(values[acertosIdx], 10);
+        const min = parseFloat(values[minIdx]?.replace(",", ".") || "0");
+        const max = parseFloat(values[maxIdx]?.replace(",", ".") || "0");
+        const media = parseFloat(values[mediaIdx]?.replace(",", ".") || "0");
+        const ano = parseInt(values[anoIdx], 10);
+
+        if (area && !isNaN(acertos) && !isNaN(media) && !isNaN(ano)) {
+          triDataCache.push({ area, acertos, min, max, media, ano });
+        }
+      }
+
+      return triDataCache;
+    } catch (error) {
+      console.error("[TRI] Erro ao carregar dados TRI:", error);
+      throw error;
+    }
+  };
+
+  // Função para obter peso de coerência baseado na porcentagem
+  const getCategoriaPeso = (porcentagem: number): number => {
+    const p = porcentagem * 100; // converter 0.2 para 20
+    if (p >= 80) return 5; // Muito Fácil
+    if (p >= 60) return 4; // Fácil
+    if (p >= 40) return 3; // Média
+    if (p >= 20) return 2; // Difícil
+    return 1; // Muito Difícil (0 a 19%)
+  };
+
+  // Função para calcular desvio padrão
+  const calcularDesvioPadrao = (valores: number[]): number => {
+    if (valores.length === 0) return 0;
+    const media = valores.reduce((a, b) => a + b, 0) / valores.length;
+    const variancia = valores.reduce((sum, val) => sum + Math.pow(val - media, 2), 0) / valores.length;
+    return Math.sqrt(variancia);
+  };
+
+  // Endpoint to get TRI estimate with coherence
+  app.post("/api/calculate-tri", async (req: Request, res: Response) => {
+    try {
+      const { students, area, ano, questionStats, answerKey } = req.body as {
+        students: StudentData[];
+        area: string; // CH, CN, MT, LC, etc
+        ano: number; // Ano da prova
+        questionStats?: Array<{ questionNumber: number; correctPercentage: number }>; // Estatísticas das questões
+        answerKey?: string[]; // Gabarito para verificar acertos
+      };
+
+      if (!students || !Array.isArray(students) || students.length === 0) {
+        res.status(400).json({ error: "Lista de alunos vazia" });
+        return;
+      }
+
+      if (!area || !ano) {
+        res.status(400).json({ error: "Área e ano são obrigatórios" });
+        return;
+      }
+
+      const triData = await loadTRIData();
+      
+      // Criar mapa de estatísticas das questões (porcentagem de acerto)
+      const statsMap = new Map<number, number>();
+      if (questionStats && questionStats.length > 0) {
+        questionStats.forEach(stat => {
+          statsMap.set(stat.questionNumber, stat.correctPercentage / 100); // Converter para 0.0-1.0
+        });
+      }
+
+      // Verificar se há variação suficiente nas questões
+      const porcentagens = Array.from(statsMap.values());
+      const desvioPadrao = calcularDesvioPadrao(porcentagens);
+      const usarCoerencia = desvioPadrao >= 0.03 && statsMap.size > 0;
+
+      const results = students.map(student => {
+        const correctAnswers = student.correctAnswers || 0;
+        
+        // Buscar dados históricos do CSV
+        const triEntry = triData.find(
+          entry => entry.area === area && entry.acertos === correctAnswers && entry.ano === ano
+        );
+
+        if (!triEntry) {
+          return {
+            studentId: student.id,
+            correctAnswers,
+            triScore: null,
+            triMin: null,
+            triMax: null,
+          };
+        }
+
+        // Se não há variação suficiente ou não há estatísticas, usar média
+        if (!usarCoerencia || correctAnswers === 0 || correctAnswers === 45) {
+          return {
+            studentId: student.id,
+            correctAnswers,
+            triScore: triEntry.media,
+            triMin: triEntry.min,
+            triMax: triEntry.max,
+          };
+        }
+
+        // Calcular coerência
+        // Criar lista de questões com peso
+        const questoesDetalhadas: Array<{
+          id: number;
+          pct: number;
+          peso: number;
+          acertou: boolean;
+        }> = [];
+
+        for (let i = 0; i < student.answers.length; i++) {
+          const questionNum = i + 1;
+          const pct = statsMap.get(questionNum) || 0;
+          const peso = getCategoriaPeso(pct);
+          const studentAnswer = student.answers[i]?.toUpperCase() || "";
+          const correctAnswer = (answerKey?.[i] || "").toUpperCase();
+          const acertou = studentAnswer !== "" && studentAnswer === correctAnswer;
+          
+          questoesDetalhadas.push({
+            id: questionNum,
+            pct,
+            peso,
+            acertou,
+          });
+        }
+
+        // Ordenar da mais fácil (maior pct) para mais difícil
+        const questoesOrdenadas = [...questoesDetalhadas].sort((a, b) => b.pct - a.pct);
+
+        // Score ideal: soma dos pesos das N questões mais fáceis
+        const scoreIdeal = questoesOrdenadas
+          .slice(0, correctAnswers)
+          .reduce((sum, q) => sum + q.peso, 0);
+
+        // Score real: soma dos pesos das questões que o aluno realmente acertou
+        const scoreReal = questoesDetalhadas
+          .filter(q => q.acertou)
+          .reduce((sum, q) => sum + q.peso, 0);
+
+        // Calcular índice de coerência (0.0 a 1.0)
+        const indiceCoerencia = scoreIdeal > 0 ? scoreReal / scoreIdeal : 0;
+        const indiceCoerenciaLimitado = Math.max(0.0, Math.min(1.0, indiceCoerencia));
+
+        // Interpolar entre min e max baseado na coerência
+        const rangeNota = triEntry.max - triEntry.min;
+        const notaFinal = triEntry.min + (rangeNota * indiceCoerenciaLimitado);
+
+        return {
+          studentId: student.id,
+          correctAnswers,
+          triScore: notaFinal,
+          triMin: triEntry.min,
+          triMax: triEntry.max,
+          indiceCoerencia: indiceCoerenciaLimitado,
+        };
+      });
+
+      res.json({ results, usarCoerencia });
+    } catch (error) {
+      console.error("[TRI] Erro ao calcular TRI:", error);
+      res.status(500).json({
+        error: "Erro ao calcular notas TRI",
+        details: error instanceof Error ? error.message : "Erro desconhecido",
+      });
+    }
   });
 
   return httpServer;

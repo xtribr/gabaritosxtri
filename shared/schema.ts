@@ -144,6 +144,7 @@ export const examStatisticsSchema = z.object({
     acertos: z.number(),
     erros: z.number(),
     nota: z.number(),
+    triScore: z.number().nullable().optional(),
   })).optional(),
   turmaStats: z.array(z.object({
     turma: z.string(),
