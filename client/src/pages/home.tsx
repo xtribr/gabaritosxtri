@@ -2806,9 +2806,7 @@ export default function Home() {
                       Notas e Scores dos Alunos
                     </CardTitle>
                     <CardDescription>
-                      Visualização completa das notas TCT (0,0 a 10,0) e TRI (0-1000) por aluno e por área.
-                      {selectedTemplate.name === "ENEM - Dia 1" && " Dia 1: Linguagens (LC) e Humanas (CH)."}
-                      {selectedTemplate.name === "ENEM - Dia 2" && " Dia 2: Ciências da Natureza (CN) e Matemática (MT)."}
+                      Visualização completa das notas TCT (0,0 a 10,0) e TRI (0-1000) por aluno e por área (LC, CH, CN, MT).
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -2823,31 +2821,16 @@ export default function Home() {
                             <TableHead className="w-24 text-center font-semibold text-xs uppercase tracking-wide">Acertos</TableHead>
                             {selectedTemplate.name.includes("ENEM") && (
                               <>
-                                {/* Dia 1: LC e CH | Dia 2: CN e MT */}
-                                {(selectedTemplate.name === "ENEM - Dia 1" || !selectedTemplate.name.includes("Dia 2")) && (
-                                  <>
-                                    <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">LC</TableHead>
-                                    <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">CH</TableHead>
-                                  </>
-                                )}
-                                {selectedTemplate.name === "ENEM - Dia 2" && (
-                                  <>
-                                    <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">CN</TableHead>
-                                    <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">MT</TableHead>
-                                  </>
-                                )}
-                                {(selectedTemplate.name === "ENEM - Dia 1" || !selectedTemplate.name.includes("Dia 2")) && (
-                                  <>
-                                    <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">LC TRI</TableHead>
-                                    <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">CH TRI</TableHead>
-                                  </>
-                                )}
-                                {selectedTemplate.name === "ENEM - Dia 2" && (
-                                  <>
-                                    <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">CN TRI</TableHead>
-                                    <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">MT TRI</TableHead>
-                                  </>
-                                )}
+                                {/* TCT: Todas as 4 áreas */}
+                                <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">LC (TCT)</TableHead>
+                                <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">CH (TCT)</TableHead>
+                                <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">CN (TCT)</TableHead>
+                                <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">MT (TCT)</TableHead>
+                                {/* TRI: Todas as 4 áreas */}
+                                <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">LC (TRI)</TableHead>
+                                <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">CH (TRI)</TableHead>
+                                <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">CN (TRI)</TableHead>
+                                <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">MT (TRI)</TableHead>
                               </>
                             )}
                             <TableHead className="w-24 text-center font-semibold text-xs uppercase tracking-wide bg-green-50 dark:bg-green-950">TCT</TableHead>
@@ -2881,127 +2864,105 @@ export default function Home() {
                                 </TableCell>
                                 {selectedTemplate.name.includes("ENEM") && (
                                   <>
-                                    {/* Dia 1: Mostrar LC e CH | Dia 2: Mostrar CN e MT */}
-                                    {(selectedTemplate.name === "ENEM - Dia 1" || !selectedTemplate.name.includes("Dia 2")) && (
-                                      <>
-                                        {/* TCT por área - Linguagens */}
-                                        <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
-                                          {student.lc !== null && student.lc !== undefined ? (
-                                            <div className="flex flex-col items-center gap-0.5">
-                                              <span className="text-xs text-muted-foreground">{student.lcAcertos || 0} acertos</span>
-                                              <span className="font-semibold text-blue-600 dark:text-blue-400">
-                                                TCT {student.lc.toFixed(1)}
-                                              </span>
-                                            </div>
-                                          ) : (
-                                            <span className="text-muted-foreground text-sm">-</span>
-                                          )}
-                                        </TableCell>
-                                        {/* TCT por área - Humanas */}
-                                        <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
-                                          {student.ch !== null && student.ch !== undefined ? (
-                                            <div className="flex flex-col items-center gap-0.5">
-                                              <span className="text-xs text-muted-foreground">{student.chAcertos || 0} acertos</span>
-                                              <span className="font-semibold text-blue-600 dark:text-blue-400">
-                                                TCT {student.ch.toFixed(1)}
-                                              </span>
-                                            </div>
-                                          ) : (
-                                            <span className="text-muted-foreground text-sm">-</span>
-                                          )}
-                                        </TableCell>
-                                      </>
-                                    )}
-                                    {selectedTemplate.name === "ENEM - Dia 2" && (
-                                      <>
-                                        {/* TCT por área - Ciências da Natureza */}
-                                        <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
-                                          {student.cn !== null && student.cn !== undefined ? (
-                                            <div className="flex flex-col items-center gap-0.5">
-                                              <span className="text-xs text-muted-foreground">{student.cnAcertos || 0} acertos</span>
-                                              <span className="font-semibold text-blue-600 dark:text-blue-400">
-                                                TCT {student.cn.toFixed(1)}
-                                              </span>
-                                            </div>
-                                          ) : (
-                                            <span className="text-muted-foreground text-sm">-</span>
-                                          )}
-                                        </TableCell>
-                                        {/* TCT por área - Matemática */}
-                                        <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
-                                          {student.mt !== null && student.mt !== undefined ? (
-                                            <div className="flex flex-col items-center gap-0.5">
-                                              <span className="text-xs text-muted-foreground">{student.mtAcertos || 0} acertos</span>
-                                              <span className="font-semibold text-blue-600 dark:text-blue-400">
-                                                TCT {student.mt.toFixed(1)}
-                                              </span>
-                                            </div>
-                                          ) : (
-                                            <span className="text-muted-foreground text-sm">-</span>
-                                          )}
-                                        </TableCell>
-                                      </>
-                                    )}
-                                    {(selectedTemplate.name === "ENEM - Dia 1" || !selectedTemplate.name.includes("Dia 2")) && (
-                                      <>
-                                        {/* TRI por área - Linguagens */}
-                                        <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
-                                          {student.triLc !== null && student.triLc !== undefined ? (
-                                            <div className="flex flex-col items-center gap-0.5">
-                                              <span className="text-xs text-muted-foreground">{student.lcAcertos || 0} acertos</span>
-                                              <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                                TRI {student.triLc.toFixed(1)}
-                                              </span>
-                                            </div>
-                                          ) : (
-                                            <span className="text-muted-foreground text-sm">-</span>
-                                          )}
-                                        </TableCell>
-                                        {/* TRI por área - Humanas */}
-                                        <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
-                                          {student.triCh !== null && student.triCh !== undefined ? (
-                                            <div className="flex flex-col items-center gap-0.5">
-                                              <span className="text-xs text-muted-foreground">{student.chAcertos || 0} acertos</span>
-                                              <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                                TRI {student.triCh.toFixed(1)}
-                                              </span>
-                                            </div>
-                                          ) : (
-                                            <span className="text-muted-foreground text-sm">-</span>
-                                          )}
-                                        </TableCell>
-                                      </>
-                                    )}
-                                    {selectedTemplate.name === "ENEM - Dia 2" && (
-                                      <>
-                                        {/* TRI por área - Ciências da Natureza */}
-                                        <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
-                                          {student.triCn !== null && student.triCn !== undefined ? (
-                                            <div className="flex flex-col items-center gap-0.5">
-                                              <span className="text-xs text-muted-foreground">{student.cnAcertos || 0} acertos</span>
-                                              <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                                TRI {student.triCn.toFixed(1)}
-                                              </span>
-                                            </div>
-                                          ) : (
-                                            <span className="text-muted-foreground text-sm">-</span>
-                                          )}
-                                        </TableCell>
-                                        {/* TRI por área - Matemática */}
-                                        <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
-                                          {student.triMt !== null && student.triMt !== undefined ? (
-                                            <div className="flex flex-col items-center gap-0.5">
-                                              <span className="text-xs text-muted-foreground">{student.mtAcertos || 0} acertos</span>
-                                              <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                                TRI {student.triMt.toFixed(1)}
-                                              </span>
-                                            </div>
-                                          ) : (
-                                            <span className="text-muted-foreground text-sm">-</span>
-                                          )}
-                                        </TableCell>
-                                      </>
-                                    )}
+                                    {/* TCT: Todas as 4 áreas sempre visíveis */}
+                                    <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
+                                      {student.lc !== null && student.lc !== undefined ? (
+                                        <div className="flex flex-col items-center gap-0.5">
+                                          <span className="text-xs text-muted-foreground">{student.lcAcertos || 0} acertos</span>
+                                          <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                            {student.lc.toFixed(1)}
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <span className="text-muted-foreground text-sm">-</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
+                                      {student.ch !== null && student.ch !== undefined ? (
+                                        <div className="flex flex-col items-center gap-0.5">
+                                          <span className="text-xs text-muted-foreground">{student.chAcertos || 0} acertos</span>
+                                          <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                            {student.ch.toFixed(1)}
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <span className="text-muted-foreground text-sm">-</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
+                                      {student.cn !== null && student.cn !== undefined ? (
+                                        <div className="flex flex-col items-center gap-0.5">
+                                          <span className="text-xs text-muted-foreground">{student.cnAcertos || 0} acertos</span>
+                                          <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                            {student.cn.toFixed(1)}
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <span className="text-muted-foreground text-sm">-</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
+                                      {student.mt !== null && student.mt !== undefined ? (
+                                        <div className="flex flex-col items-center gap-0.5">
+                                          <span className="text-xs text-muted-foreground">{student.mtAcertos || 0} acertos</span>
+                                          <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                            {student.mt.toFixed(1)}
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <span className="text-muted-foreground text-sm">-</span>
+                                      )}
+                                    </TableCell>
+                                    
+                                    {/* TRI: Todas as 4 áreas sempre visíveis */}
+                                    <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
+                                      {student.triLc !== null && student.triLc !== undefined ? (
+                                        <div className="flex flex-col items-center gap-0.5">
+                                          <span className="text-xs text-muted-foreground">{student.lcAcertos || 0} acertos</span>
+                                          <span className="font-semibold text-purple-600 dark:text-purple-400">
+                                            {student.triLc.toFixed(1)}
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <span className="text-muted-foreground text-sm">-</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
+                                      {student.triCh !== null && student.triCh !== undefined ? (
+                                        <div className="flex flex-col items-center gap-0.5">
+                                          <span className="text-xs text-muted-foreground">{student.chAcertos || 0} acertos</span>
+                                          <span className="font-semibold text-purple-600 dark:text-purple-400">
+                                            {student.triCh.toFixed(1)}
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <span className="text-muted-foreground text-sm">-</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
+                                      {student.triCn !== null && student.triCn !== undefined ? (
+                                        <div className="flex flex-col items-center gap-0.5">
+                                          <span className="text-xs text-muted-foreground">{student.cnAcertos || 0} acertos</span>
+                                          <span className="font-semibold text-purple-600 dark:text-purple-400">
+                                            {student.triCn.toFixed(1)}
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <span className="text-muted-foreground text-sm">-</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
+                                      {student.triMt !== null && student.triMt !== undefined ? (
+                                        <div className="flex flex-col items-center gap-0.5">
+                                          <span className="text-xs text-muted-foreground">{student.mtAcertos || 0} acertos</span>
+                                          <span className="font-semibold text-purple-600 dark:text-purple-400">
+                                            {student.triMt.toFixed(1)}
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <span className="text-muted-foreground text-sm">-</span>
+                                      )}
+                                    </TableCell>
                                   </>
                                 )}
                                 <TableCell className="text-center bg-green-50/50 dark:bg-green-950/50">
