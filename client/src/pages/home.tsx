@@ -287,6 +287,13 @@ export default function Home() {
       const areaScores = student.areaScores || {};
       // Notas TRI por área (LC, CH, CN, MT)
       const triAreaScores = triScoresByArea.get(student.id) || {};
+      
+      // DEBUG: Log triAreaScores para o primeiro aluno
+      if (student.id === studentsWithScores[0]?.id) {
+        console.log("[studentStats] student.id:", student.id);
+        console.log("[studentStats] triAreaScores:", triAreaScores);
+        console.log("[studentStats] areaScores:", areaScores);
+      }
       // Acertos por área
       const areaCorrectAnswers = student.areaCorrectAnswers || {};
       return {
