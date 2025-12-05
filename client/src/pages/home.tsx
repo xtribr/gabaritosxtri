@@ -152,14 +152,33 @@ export default function Home() {
         ? Math.round((correctAnswers / answerKey.length) * 1000) / 10 
         : 0;
       
+      // Calcular acertos por área (LC, CH, CN, MT)
+      const areaCorrectAnswers: Record<string, number> = {};
+      const areas = getAreasByTemplate(selectedTemplate.name, numQuestions);
+      
+      areas.forEach(({ area, start, end }) => {
+        let areaCorrect = 0;
+        for (let i = start - 1; i < end && i < student.answers.length; i++) {
+          if (i < answerKey.length && student.answers[i] != null && answerKey[i] != null) {
+            const normalizedAnswer = String(student.answers[i]).toUpperCase().trim();
+            const normalizedKey = String(answerKey[i]).toUpperCase().trim();
+            if (normalizedAnswer === normalizedKey) {
+              areaCorrect++;
+            }
+          }
+        }
+        areaCorrectAnswers[area] = areaCorrect;
+      });
+      
       return {
         ...student,
         score,
         correctAnswers,
         wrongAnswers,
+        areaCorrectAnswers, // Adicionar acertos por área
       };
     });
-  }, [students, answerKey]);
+  }, [students, answerKey, selectedTemplate.name, numQuestions]);
 
   const statistics = useMemo((): ExamStatistics | null => {
     if (studentsWithScores.length === 0 || answerKey.length === 0) return null;
