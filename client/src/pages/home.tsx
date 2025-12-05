@@ -2489,10 +2489,14 @@ export default function Home() {
             </div>
 
             <Tabs value={mainActiveTab} onValueChange={setMainActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-5">
+              <TabsList className="grid w-full grid-cols-6">
                 <TabsTrigger value="alunos" data-testid="tab-alunos">
                   <Users className="h-4 w-4 mr-2" />
                   Alunos
+                </TabsTrigger>
+                <TabsTrigger value="scores" data-testid="tab-scores">
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Scores
                 </TabsTrigger>
                 <TabsTrigger value="gabarito" data-testid="tab-gabarito">
                   <ClipboardList className="h-4 w-4 mr-2" />
@@ -2666,7 +2670,138 @@ export default function Home() {
                 </Card>
               </TabsContent>
 
-              {/* ABA 2: GABARITO */}
+              {/* ABA 2: SCORES */}
+              <TabsContent value="scores" className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5 text-blue-600" />
+                      Notas e Scores dos Alunos
+                    </CardTitle>
+                    <CardDescription>
+                      Visualização completa das notas TCT (0,0 a 10,0) e TRI (0-1000) por aluno e por área
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+                      <Table>
+                        <TableHeader className="sticky top-0 z-10 bg-card">
+                          <TableRow className="bg-muted/50 border-b">
+                            <TableHead className="w-16 text-center font-semibold text-xs uppercase tracking-wide">#</TableHead>
+                            <TableHead className="min-w-[120px] font-semibold text-xs uppercase tracking-wide">Matrícula</TableHead>
+                            <TableHead className="min-w-[180px] font-semibold text-xs uppercase tracking-wide">Nome</TableHead>
+                            <TableHead className="min-w-[100px] font-semibold text-xs uppercase tracking-wide">Turma</TableHead>
+                            <TableHead className="w-24 text-center font-semibold text-xs uppercase tracking-wide">Acertos</TableHead>
+                            {selectedTemplate.name.includes("ENEM") && (
+                              <>
+                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">LC</TableHead>
+                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">CH</TableHead>
+                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">CN</TableHead>
+                                <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide bg-blue-50 dark:bg-blue-950">MT</TableHead>
+                              </>
+                            )}
+                            <TableHead className="w-24 text-center font-semibold text-xs uppercase tracking-wide bg-green-50 dark:bg-green-950">TCT</TableHead>
+                            <TableHead className="w-24 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">TRI</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {statistics?.studentStats?.map((student, index) => {
+                            const notaTCT = student.nota || 0;
+                            const triScore = student.triScore || null;
+                            
+                            return (
+                              <TableRow 
+                                key={`${student.matricula}-${index}`}
+                                className={index % 2 === 0 ? "bg-background" : "bg-muted/30"}
+                              >
+                                <TableCell className="text-center font-medium text-muted-foreground">
+                                  {index + 1}
+                                </TableCell>
+                                <TableCell className="font-medium">
+                                  {student.matricula}
+                                </TableCell>
+                                <TableCell>
+                                  {student.nome}
+                                </TableCell>
+                                <TableCell>
+                                  {student.turma || "-"}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <span className="font-semibold">{student.acertos}</span>
+                                </TableCell>
+                                {selectedTemplate.name.includes("ENEM") && (
+                                  <>
+                                    <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
+                                      {student.lc !== null && student.lc !== undefined ? (
+                                        <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                          {student.lc.toFixed(1)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground text-sm">-</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
+                                      {student.ch !== null && student.ch !== undefined ? (
+                                        <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                          {student.ch.toFixed(1)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground text-sm">-</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
+                                      {student.cn !== null && student.cn !== undefined ? (
+                                        <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                          {student.cn.toFixed(1)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground text-sm">-</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-center bg-blue-50/50 dark:bg-blue-950/50">
+                                      {student.mt !== null && student.mt !== undefined ? (
+                                        <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                          {student.mt.toFixed(1)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground text-sm">-</span>
+                                      )}
+                                    </TableCell>
+                                  </>
+                                )}
+                                <TableCell className="text-center bg-green-50/50 dark:bg-green-950/50">
+                                  <span className={`font-semibold ${
+                                    notaTCT >= 6.0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+                                  }`}>
+                                    {notaTCT.toFixed(1)}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
+                                  {triScore !== null && triScore !== undefined ? (
+                                    <span className="font-semibold text-purple-600 dark:text-purple-400">
+                                      {triScore.toFixed(1)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground text-sm">-</span>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          }) || (
+                            <TableRow>
+                              <TableCell colSpan={selectedTemplate.name.includes("ENEM") ? 11 : 7} className="text-center py-8 text-muted-foreground">
+                                Nenhum dado disponível. Processe um PDF e configure o gabarito primeiro.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* ABA 3: GABARITO */}
               <TabsContent value="gabarito" className="mt-4">
                 {answerKey.length > 0 && (
                   <Card>
