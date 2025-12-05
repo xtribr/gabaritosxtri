@@ -291,8 +291,10 @@ export default function Home() {
       // DEBUG: Log triAreaScores para o primeiro aluno
       if (student.id === studentsWithScores[0]?.id) {
         console.log("[studentStats] student.id:", student.id);
+        console.log("[studentStats] triScoresByArea.size:", triScoresByArea.size);
         console.log("[studentStats] triAreaScores:", triAreaScores);
         console.log("[studentStats] areaScores:", areaScores);
+        console.log("[studentStats] student.triScore:", student.triScore);
       }
       // Acertos por área
       const areaCorrectAnswers = student.areaCorrectAnswers || {};
@@ -1364,10 +1366,11 @@ export default function Home() {
         const tctPercentage = averageTCT * 10; // Multiplicar por 10 para converter 0-10 em 0-100
         
         return {
-          ...student,
+          ...student, // Manter TUDO do aluno (incluindo triScore se existir)
           score: tctPercentage,
-          areaScores: areaScoresMap, // Armazenar notas por área
+          areaScores: areaScoresMap, // Armazenar notas TCT por área
           areaCorrectAnswers: areaCorrectAnswersMap, // Armazenar acertos por área
+          // NÃO sobrescrever triScore se já existir
         };
       }));
     } else {
@@ -1381,8 +1384,9 @@ export default function Home() {
         const tctPercentage = parseFloat((tctScore * 10).toFixed(3)); // Multiplicar por 10 para converter 0-10 em 0-100
         
         return {
-          ...student,
+          ...student, // Manter TUDO (incluindo triScore)
           score: tctPercentage,
+          // NÃO sobrescrever triScore se já existir
         };
       }));
     }
