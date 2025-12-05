@@ -1265,12 +1265,11 @@ export default function Home() {
       setStudents(prev => prev.map(student => {
         const triScore = calculatedTriScores.get(student.id);
         if (triScore !== undefined) {
-          // Converter TRI (0-1000) para porcentagem (0-100)
-          const triPercentage = (triScore / 10);
+          // NÃO sobrescrever score (TCT) - apenas adicionar triScore
           return {
             ...student,
-            score: triPercentage,
-            triScore: triScore, // Armazenar também o TRI score no aluno
+            triScore: triScore, // Armazenar TRI score (0-1000)
+            // Manter score (TCT) existente, areaScores, areaCorrectAnswers
           };
         }
         return student;
@@ -1388,9 +1387,9 @@ export default function Home() {
       }));
     }
 
-    // Limpar TRI scores quando usar TCT
-    setTriScores(new Map());
-    setTriScoresCount(0);
+    // Não limpar TRI scores - manter ambas as notas calculadas
+    // setTriScores(new Map());
+    // setTriScoresCount(0);
 
     toast({
       title: "Notas TCT calculadas",
