@@ -136,10 +136,13 @@ export default function Home() {
       let wrongAnswers = 0;
       
       student.answers.forEach((answer, index) => {
-        if (index < answerKey.length) {
-          if (answer.toUpperCase() === answerKey[index].toUpperCase()) {
+        if (index < answerKey.length && answer != null && answerKey[index] != null) {
+          const normalizedAnswer = String(answer).toUpperCase().trim();
+          const normalizedKey = String(answerKey[index]).toUpperCase().trim();
+          
+          if (normalizedAnswer === normalizedKey) {
             correctAnswers++;
-          } else if (answer.trim() !== "") {
+          } else if (normalizedAnswer !== "") {
             wrongAnswers++;
           }
         }
@@ -828,7 +831,14 @@ export default function Home() {
 
   // Função para calcular TRI automaticamente para todas as áreas
   const calculateTRIForAllAreas = async (areas: Array<{ area: string; start: number; end: number }>, ano: number = 2023, currentAnswerKey?: string[]): Promise<Map<string, number>> => {
+    // IMPORTANTE: Sempre usar o answerKey passado como parâmetro, não o estado
+    // O estado pode não estar atualizado ainda devido à natureza assíncrona do React
     const answerKeyToUse = currentAnswerKey || answerKey;
+    
+    console.log("[TRI] calculateTRIForAllAreas chamado com:");
+    console.log("  - answerKeyToUse.length:", answerKeyToUse.length);
+    console.log("  - currentAnswerKey?.length:", currentAnswerKey?.length);
+    console.log("  - answerKey.length (estado):", answerKey.length);
     
     if (studentsWithScores.length === 0 || answerKeyToUse.length === 0) {
       console.error("[TRI] Erro: studentsWithScores.length =", studentsWithScores.length, "answerKey.length =", answerKeyToUse.length);
@@ -868,8 +878,12 @@ export default function Home() {
           
           let correctCount = 0;
           answersForArea.forEach((answer, idx) => {
-            if (answer && answerKeyForArea[idx] && answer.toUpperCase() === answerKeyForArea[idx].toUpperCase()) {
-              correctCount++;
+            if (answer != null && answerKeyForArea[idx] != null) {
+              const normalizedAnswer = String(answer).toUpperCase().trim();
+              const normalizedKey = String(answerKeyForArea[idx]).toUpperCase().trim();
+              if (normalizedAnswer === normalizedKey) {
+                correctCount++;
+              }
             }
           });
 
@@ -1071,20 +1085,16 @@ export default function Home() {
       return;
     }
     
-    // Aplicar o gabarito se ainda não foi aplicado
-    let finalAnswerKey = answerKey;
-    if (answerKey.length === 0) {
-      // Se não tem gabarito configurado, tentar aplicar
-      if (questionContents.length === 0) {
-        toast({
-          title: "Gabarito não configurado",
-          description: "Configure o gabarito antes de calcular o TRI.",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      // Aplicar o gabarito e obter o resultado diretamente
+    // CRÍTICO: Garantir que temos um gabarito válido ANTES de calcular
+    let finalAnswerKey: string[] = [];
+    
+    // Primeiro, tentar usar o answerKey do estado se estiver válido
+    if (answerKey.length > 0 && answerKey.filter(a => a).length > 0) {
+      finalAnswerKey = [...answerKey]; // Criar cópia para evitar mutação
+      console.log("[TRI] Usando answerKey do estado:", finalAnswerKey.length, "respostas");
+    } else if (questionContents.length > 0) {
+      // Se não tem no estado, aplicar do questionContents
+      console.log("[TRI] Aplicando gabarito de questionContents...");
       const appliedAnswerKey = await handleApplyAnswerKey();
       
       if (!appliedAnswerKey || appliedAnswerKey.length === 0) {
@@ -1097,16 +1107,12 @@ export default function Home() {
       }
       
       finalAnswerKey = appliedAnswerKey;
-    }
-    
-    // Validações após aplicar o gabarito
-    console.log("[TRI] Validação após aplicar gabarito:");
-    console.log("  - students.length:", students.length);
-    console.log("  - studentsWithScores.length:", studentsWithScores.length);
-    console.log("  - answerKey.length:", answerKey.length);
-    console.log("  - questionContents.length:", questionContents.length);
-    
-    if (finalAnswerKey.length === 0) {
+      console.log("[TRI] Gabarito aplicado:", finalAnswerKey.length, "respostas");
+      
+      // Atualizar o estado também para próxima vez
+      setAnswerKey(finalAnswerKey);
+    } else {
+      // Não tem gabarito em lugar nenhum
       toast({
         title: "Gabarito não configurado",
         description: "Configure o gabarito antes de calcular o TRI.",
@@ -1114,6 +1120,26 @@ export default function Home() {
       });
       return;
     }
+    
+    // Validação FINAL crítica
+    const validAnswersCount = finalAnswerKey.filter(a => a && a.trim() !== "").length;
+    if (validAnswersCount === 0) {
+      toast({
+        title: "Gabarito inválido",
+        description: "O gabarito não contém respostas válidas. Configure pelo menos uma resposta.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Validações após aplicar o gabarito
+    console.log("[TRI] Validação FINAL:");
+    console.log("  - finalAnswerKey.length:", finalAnswerKey.length);
+    console.log("  - validAnswersCount:", validAnswersCount);
+    console.log("  - students.length:", students.length);
+    console.log("  - studentsWithScores.length:", studentsWithScores.length);
+    console.log("  - answerKey.length (estado):", answerKey.length);
+    console.log("  - questionContents.length:", questionContents.length);
     
     // Verificar se os alunos têm IDs válidos
     const alunosSemId = studentsWithScores.filter(s => !s.id || s.id.trim() === "");
@@ -1145,13 +1171,15 @@ export default function Home() {
     // Usar ano 2023 por padrão (último ano disponível no CSV)
     const ano = 2023;
     console.log("[TRI] Calculando TRI para", areas.length, "áreas, ano:", ano);
+    console.log("[TRI] Usando finalAnswerKey com", finalAnswerKey.length, "respostas");
     
     toast({
       title: "Calculando TRI",
       description: `Calculando notas TRI para ${areas.length} área(s)...`,
     });
 
-    const calculatedTriScores = await calculateTRIForAllAreas(areas, ano);
+    // CRÍTICO: Passar finalAnswerKey explicitamente, não depender do estado
+    const calculatedTriScores = await calculateTRIForAllAreas(areas, ano, finalAnswerKey);
 
     // Verificar se o cálculo foi bem-sucedido
     console.log("[TRI] Resultado do cálculo:", calculatedTriScores);
@@ -1270,8 +1298,12 @@ export default function Home() {
           
           let correctCount = 0;
           answersForArea.forEach((answer, idx) => {
-            if (answer && answerKeyForArea[idx] && answer.toUpperCase() === answerKeyForArea[idx].toUpperCase()) {
-              correctCount++;
+            if (answer != null && answerKeyForArea[idx] != null) {
+              const normalizedAnswer = String(answer).toUpperCase().trim();
+              const normalizedKey = String(answerKeyForArea[idx]).toUpperCase().trim();
+              if (normalizedAnswer === normalizedKey) {
+                correctCount++;
+              }
             }
           });
           
@@ -2416,8 +2448,92 @@ export default function Home() {
               </CardHeader>
               {pagePreviews.length > 0 && (
                 <CardContent className="pt-0">
+                  {/* Visualização da primeira página com overlay verde (apenas para ENEM90) */}
+                  {pagePreviews.length > 0 && selectedTemplate.name.includes("ENEM") && selectedTemplate.totalQuestions === 90 && (
+                    <div className="mb-6">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 bg-green-500 rounded border-2 border-green-700"></div>
+                          <span className="text-sm font-medium">Áreas de Leitura OMR (Primeira Página)</span>
+                        </div>
+                        <Badge variant="outline" className="text-xs">
+                          Página 1
+                        </Badge>
+                      </div>
+                      <div className="relative border-2 border-green-500 rounded-lg overflow-hidden bg-muted">
+                        <div className="relative" style={{ aspectRatio: '3/4', maxHeight: '600px' }}>
+                          <img
+                            src={pagePreviews[0].imageUrl}
+                            alt="Página 1 com overlay OMR"
+                            className="w-full h-full object-contain"
+                          />
+                          {/* Overlay SVG com quadrados verdes */}
+                          <svg
+                            className="absolute inset-0 w-full h-full pointer-events-none"
+                            style={{ imageRendering: 'pixelated' }}
+                            viewBox="0 0 1240 1756"
+                            preserveAspectRatio="xMidYMid meet"
+                          >
+                            {(() => {
+                              // COORDENADAS CALIBRADAS v4.0 ESCALADAS (5 DEZ 2025)
+                              // Calibração detectada automaticamente por HoughCircles - VERIFICADA VISUALMENTE
+                              // Escaladas para tamanho real: 1240x1756px (scale: 1.161x, 1.172y)
+                              const y_coords = [1212, 1240, 1269, 1300, 1330, 1358, 1389, 1419, 1449, 1478, 1507, 1536, 1567, 1596, 1625];
+                              
+                              const blocos_x = [
+                                [103, 132, 164, 195, 224],      // Bloco 1: Q01-Q15
+                                [294, 323, 353, 383, 413],      // Bloco 2: Q16-Q30
+                                [483, 513, 543, 574, 604],     // Bloco 3: Q31-Q45
+                                [673, 702, 732, 763, 794],     // Bloco 4: Q46-Q60
+                                [864, 893, 923, 954, 983],     // Bloco 5: Q61-Q75
+                                [1052, 1081, 1111, 1142, 1173]  // Bloco 6: Q76-Q90
+                              ];
+                              
+                              const bubble_radius = 13; // Raio calibrado (v4.0 escalado)
+                              const bubble_diameter = 26; // Diâmetro
+                              
+                              const squares: JSX.Element[] = [];
+                              
+                              // Desenhar quadrados para todas as 90 questões
+                              for (let q = 1; q <= 90; q++) {
+                                const col = Math.floor((q - 1) / 15);
+                                const row = (q - 1) % 15;
+                                const y = y_coords[row]; // Usar coordenadas Y calibradas
+                                const x_positions = blocos_x[col]; // Usar coordenadas X calibradas por bloco
+                                
+                                // Desenhar quadrado para cada opção (A, B, C, D, E)
+                                for (let opt = 0; opt < 5; opt++) {
+                                  const x = x_positions[opt];
+                                  squares.push(
+                                    <rect
+                                      key={`q${q}-opt${opt}`}
+                                      x={x - bubble_radius}
+                                      y={y - bubble_radius}
+                                      width={bubble_diameter}
+                                      height={bubble_diameter}
+                                      fill="rgba(34, 197, 94, 0.5)"
+                                      stroke="rgb(22, 163, 74)"
+                                      strokeWidth="1.5"
+                                      rx="2"
+                                    />
+                                  );
+                                }
+                              }
+                              
+                              return squares;
+                            })()}
+                          </svg>
+                        </div>
+                        <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                          Quadrados verdes = Onde o OMR está lendo
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Grid de previews das outras páginas */}
                   <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
-                    {pagePreviews.map((preview) => (
+                    {pagePreviews.slice(1).map((preview) => (
                       <div
                         key={preview.pageNumber}
                         className="relative aspect-[3/4] rounded-md overflow-hidden border bg-muted"
@@ -2654,15 +2770,19 @@ export default function Home() {
                             <TableCell className="h-12">
                               <div className="flex flex-wrap gap-1">
                                 {student.answers.map((answer, ansIndex) => {
-                                  const isCorrect = answerKey.length > 0 && ansIndex < answerKey.length && 
-                                    answer.toUpperCase() === answerKey[ansIndex].toUpperCase();
-                                  const isWrong = answerKey.length > 0 && ansIndex < answerKey.length && 
-                                    answer.trim() !== "" && answer.toUpperCase() !== answerKey[ansIndex].toUpperCase();
+                                  const answerStr = answer != null ? String(answer) : "";
+                                  const keyStr = answerKey.length > 0 && ansIndex < answerKey.length && answerKey[ansIndex] != null 
+                                    ? String(answerKey[ansIndex]) : "";
+                                  
+                                  const isCorrect = keyStr !== "" && 
+                                    answerStr.toUpperCase().trim() === keyStr.toUpperCase().trim();
+                                  const isWrong = keyStr !== "" && 
+                                    answerStr.trim() !== "" && answerStr.toUpperCase().trim() !== keyStr.toUpperCase().trim();
                                   
                                   return (
                                     <Input
                                       key={ansIndex}
-                                      value={answer}
+                                      value={answerStr || ""}
                                       onChange={(e) => updateStudentAnswer(index, ansIndex, e.target.value)}
                                       className={`h-7 w-8 text-center text-xs font-mono p-0 ${
                                         isCorrect ? "border-green-500 bg-green-50 dark:bg-green-950" : 
@@ -2908,7 +3028,7 @@ export default function Home() {
                             <div key={index} className="flex flex-col items-center gap-1">
                               <span className="text-xs text-muted-foreground">{index + 1}</span>
                               <Input
-                                value={answer}
+                                value={answer != null ? String(answer) : ""}
                                 onChange={(e) => updateAnswerKeyValue(index, e.target.value)}
                                 className="h-8 w-10 text-center font-mono text-sm p-0"
                                 maxLength={1}

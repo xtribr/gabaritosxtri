@@ -1,0 +1,16 @@
+{
+  "versao": "4.0",
+  "resolucao": "1068x1498px",
+  "nota": "Calibração detectada automaticamente por HoughCircles - VERIFICADA VISUALMENTE",
+  "coordenadas_y": [1034, 1058, 1083, 1109, 1135, 1159, 1185, 1211, 1236, 1261, 1286, 1311, 1337, 1362, 1387],
+  "blocos": [
+    {"id": 1, "questoes": "Q01-Q15", "A": 89, "B": 114, "C": 141, "D": 168, "E": 193},
+    {"id": 2, "questoes": "Q16-Q30", "A": 253, "B": 278, "C": 304, "D": 330, "E": 356},
+    {"id": 3, "questoes": "Q31-Q45", "A": 416, "B": 442, "C": 468, "D": 494, "E": 520},
+    {"id": 4, "questoes": "Q46-Q60", "A": 580, "B": 605, "C": 631, "D": 658, "E": 684},
+    {"id": 5, "questoes": "Q61-Q75", "A": 744, "B": 769, "C": 795, "D": 822, "E": 847},
+    {"id": 6, "questoes": "Q76-Q90", "A": 906, "B": 932, "C": 958, "D": 985, "E": 1010}
+  ],
+  "circulo": {"raio_px": 11, "diametro_px": 22}
+}
+

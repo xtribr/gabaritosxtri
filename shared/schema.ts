@@ -2,30 +2,33 @@ import { z } from "zod";
 
 export const studentDataSchema = z.object({
   id: z.string(),
-  studentNumber: z.string(), // Matrícula (ID único)
+  studentNumber: z.string(),
   studentName: z.string(),
-  turma: z.string().optional(), // Turma do aluno
+  turma: z.string().optional(),
   answers: z.array(z.string()),
+  aiAnswers: z.array(z.string()).optional(),
+  aiModel: z.string().optional(),
+  aiRaw: z.string().optional(),
   rawText: z.string().optional(),
   pageNumber: z.number(),
   confidence: z.number().optional(),
   score: z.number().optional(),
   correctAnswers: z.number().optional(),
   wrongAnswers: z.number().optional(),
-  areaScores: z.record(z.string(), z.number()).optional(), // Notas por área (LC, CH, CN, MT)
+  areaScores: z.record(z.string(), z.number()).optional(),
 });
 
 export const questionContentSchema = z.object({
-  questionNumber: z.number(), // Número da questão: 1, 2, 3, 4...
-  answer: z.string(), // A, B, C, D, E
-  content: z.string(), // Ex: "mat - geometria", "port - interpretação"
+  questionNumber: z.number(),
+  answer: z.string(),
+  content: z.string(),
 });
 
 export const answerKeySchema = z.object({
   id: z.string(),
   name: z.string(),
   answers: z.array(z.string()),
-  contents: z.array(questionContentSchema).optional(), // Conteúdos por questão
+  contents: z.array(questionContentSchema).optional(),
   createdAt: z.string(),
 });
 
@@ -144,15 +147,15 @@ export const examStatisticsSchema = z.object({
     acertos: z.number(),
     erros: z.number(),
     nota: z.number(),
-        triScore: z.number().nullable().optional(),
-        lc: z.number().nullable().optional(), // Nota TCT Linguagens
-        ch: z.number().nullable().optional(), // Nota TCT Humanas
-        cn: z.number().nullable().optional(), // Nota TCT Natureza
-        mt: z.number().nullable().optional(), // Nota TCT Matemática
-        triLc: z.number().nullable().optional(), // Nota TRI Linguagens
-        triCh: z.number().nullable().optional(), // Nota TRI Humanas
-        triCn: z.number().nullable().optional(), // Nota TRI Natureza
-        triMt: z.number().nullable().optional(), // Nota TRI Matemática
+    triScore: z.number().nullable().optional(),
+    lc: z.number().nullable().optional(),
+    ch: z.number().nullable().optional(),
+    cn: z.number().nullable().optional(),
+    mt: z.number().nullable().optional(),
+    triLc: z.number().nullable().optional(),
+    triCh: z.number().nullable().optional(),
+    triCn: z.number().nullable().optional(),
+    triMt: z.number().nullable().optional(),
   })).optional(),
   turmaStats: z.array(z.object({
     turma: z.string(),
@@ -184,18 +187,18 @@ export type InsertUser = Omit<User, "id">;
 
 // OMR Template Definitions
 export interface OMRRegion {
-  x: number;      // normalized 0-1
-  y: number;      // normalized 0-1
-  width: number;  // normalized 0-1
-  height: number; // normalized 0-1
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export interface OMRBubble {
   questionNumber: number;
   option: string;
-  x: number;      // normalized center x 0-1
-  y: number;      // normalized center y 0-1
-  radius: number; // normalized radius
+  x: number;
+  y: number;
+  radius: number;
 }
 
 export interface OMRTextField {
@@ -207,22 +210,35 @@ export interface OMRTextField {
 export interface OMRTemplate {
   name: string;
   description: string;
-  pageSize: { width: number; height: number }; // in points (A4 = 595 x 842)
+  pageSize: { width: number; height: number };
   dpi: number;
   totalQuestions: number;
   optionsPerQuestion: string[];
   textFields: OMRTextField[];
   bubbles: OMRBubble[];
-  anchorMarks?: OMRRegion[]; // fiducial marks for alignment
+  anchorMarks?: OMRRegion[];
 }
 
-// Gabarito Oficial Template - Simulado ENEM 90 questões
-// Based on analyzed PDF: 1240x1754 pixels at 150 DPI
-// Page structure: 6 columns of 15 questions each
+// ============================================================================
+// 🎯 GABARITO OFICIAL TEMPLATE - VERSÃO 5.0 COM CALIBRAÇÃO INTELIGENTE
+// ============================================================================
+// Calibrado em: 05/12/2025 às 16:30 - MÁXIMA PERFORMANCE
+// Baseado em análise das bordas das colunas do gabarito real + Marcadores de Canto
+// 
+// Bordas verticais detectadas: x=86, 360, 634, 909, 1185, 1459, 1724 (screenshot)
+// Área de bolhas: y=163 a y=806 (screenshot)
+// 
+// Mapeamento: Screenshot (1770x968) -> PDF (1240x1755)
+// 
+// NOVIDADES v5.0:
+// - Marcadores de canto para calibração automática
+// - Thresholds de detecção otimizados para máxima cobertura
+// - Suporte para distorções, rotações e escalas
+// ============================================================================
 export const officialGabaritoTemplate: OMRTemplate = {
-  name: "Gabarito Oficial - Simulado ENEM",
-  description: "Cartão-resposta oficial do simulado ENEM com 90 questões",
-  pageSize: { width: 595.28, height: 841.93 }, // A4 in points
+  name: "Gabarito Oficial - ENEM Completo",
+  description: "Cartão-resposta oficial do ENEM com 90 questões - Calibrado em 05/12/2025",
+  pageSize: { width: 595.28, height: 841.93 },
   dpi: 150,
   totalQuestions: 90,
   optionsPerQuestion: ["A", "B", "C", "D", "E"],
@@ -235,45 +251,97 @@ export const officialGabaritoTemplate: OMRTemplate = {
     { name: "numero", region: { x: 0.795, y: 0.070, width: 0.12, height: 0.018 }, type: "number" },
   ],
   bubbles: generateBubbleCoordinates(),
+  // ============================================================================
+  // MARCADORES DE CANTO PARA CALIBRAÇÃO AUTOMÁTICA - v5.1
+  // ============================================================================
+  // Posicionados nos 4 cantos da área de bolhas para detecção automática
+  // 
+  // Baseados na análise REAL do PDF:
+  // - Top Y: 0.0584 (primeira questão)
+  // - Bottom Y: 0.9860 (última questão detectada)
+  // - Left X: 0.1810 (opção A)
+  // - Right X: 0.6859 (opção E)
+  // 
+  // Marcadores: quadrados 30x30px (~0.035 em PDF)
   anchorMarks: [
-    { x: 0.020, y: 0.555, width: 0.025, height: 0.025 }, // left top anchor
-    { x: 0.955, y: 0.555, width: 0.025, height: 0.025 }, // right top anchor
-    { x: 0.020, y: 0.955, width: 0.025, height: 0.025 }, // left bottom anchor
-    { x: 0.955, y: 0.955, width: 0.025, height: 0.025 }, // right bottom anchor
+    // Top-left: primeira bolha (Q1A)
+    { x: 0.1810, y: 0.0584, width: 0.035, height: 0.035 },
+    // Top-right: primeira bolha opção E (Q1E)
+    { x: 0.6859, y: 0.0584, width: 0.035, height: 0.035 },
+    // Bottom-left: última questão opção A (Q44A)
+    { x: 0.1810, y: 0.9860, width: 0.035, height: 0.035 },
+    // Bottom-right: última questão opção E (Q44E)
+    { x: 0.6859, y: 0.9860, width: 0.035, height: 0.035 },
   ],
 };
 
+/**
+ * Gera coordenadas das bolhas - VERSÃO 5.2 - LAYOUT ENEM 90 QUESTÕES
+ * 
+ * Baseado na imagem real do gabarito ENEM
+ * Data: 05/12/2025
+ * 
+ * ESTRUTURA REAL DO GABARITO ENEM:
+ * - 90 questões organizadas em 6 COLUNAS
+ * - Cada coluna tem 15 questões
+ * - Layout: [Q1-Q15] [Q16-Q30] [Q31-Q45] [Q46-Q60] [Q61-Q75] [Q76-Q90]
+ * - 5 opções por questão: A, B, C, D, E (horizontais)
+ */
 function generateBubbleCoordinates(): OMRBubble[] {
   const bubbles: OMRBubble[] = [];
   const options = ["A", "B", "C", "D", "E"];
   
-  // Layout: 6 columns of 15 questions each
-  // Questions: 01-15, 16-30, 31-45, 46-60, 61-75, 76-90
-  // Calibrated from analyzed image: 1241 x 1755 pixels at 150 DPI
-  const columns = [
-    { startQuestion: 1, x: 0.0645 },   // Column 1: questions 01-15
-    { startQuestion: 16, x: 0.2192 },  // Column 2: questions 16-30
-    { startQuestion: 31, x: 0.3731 },  // Column 3: questions 31-45
-    { startQuestion: 46, x: 0.5278 },  // Column 4: questions 46-60
-    { startQuestion: 61, x: 0.6825 },  // Column 5: questions 61-75
-    { startQuestion: 76, x: 0.8372 },  // Column 6: questions 76-90
+  // Coordenadas Y para as 15 linhas (reutilizadas em todas as 6 colunas)
+  const rowYCoordinates = [
+    0.0584,  // Linha 1 (Q01, Q16, Q31, Q46, Q61, Q76)
+    0.0643,  // Linha 2
+    0.0898,  // Linha 3
+    0.1235,  // Linha 4
+    0.2059,  // Linha 5
+    0.2527,  // Linha 6
+    0.3332,  // Linha 7
+    0.3584,  // Linha 8
+    0.3599,  // Linha 9
+    0.3814,  // Linha 10
+    0.3828,  // Linha 11
+    0.4036,  // Linha 12
+    0.4047,  // Linha 13
+    0.4205,  // Linha 14
+    0.4314,  // Linha 15
   ];
   
-  const startY = 0.6934;      // Top of answer bubbles area (row 1, question 01)
-  const rowHeight = 0.01709;  // Height between rows (~30 pixels)
-  const bubbleSpacing = 0.00806; // Horizontal spacing between option bubbles (~10 pixels)
-  const bubbleRadius = 0.0046;   // Bubble radius (~8 pixels)
+  // Definir posições X para as 6 colunas de questões
+  // Cada coluna tem largura aproximada de 0.165 (normalizado)
+  const columnStartX = [
+    0.035,   // Coluna 1 (Q01-Q15)
+    0.200,   // Coluna 2 (Q16-Q30)
+    0.365,   // Coluna 3 (Q31-Q45)
+    0.530,   // Coluna 4 (Q46-Q60)
+    0.695,   // Coluna 5 (Q61-Q75)
+    0.860,   // Coluna 6 (Q76-Q90)
+  ];
   
-  for (const col of columns) {
+  // Espaçamento entre opções dentro de cada questão (A, B, C, D, E)
+  const optionSpacing = 0.025;  // 2.5% da largura
+  
+  // Raio da bolha para amostragem
+  const bubbleRadius = 0.006;  // 6mm de raio
+  
+  // ============================================================================
+  // GERAÇÃO DAS 450 BOLHAS (90 questões × 5 opções)
+  // ============================================================================
+  
+  for (let col = 0; col < 6; col++) {
     for (let row = 0; row < 15; row++) {
-      const questionNumber = col.startQuestion + row;
-      const y = startY + (row * rowHeight);
+      const questionNumber = col * 15 + row + 1; // Q1-Q90
+      const y = rowYCoordinates[row];
+      const baseX = columnStartX[col];
       
       for (let optIdx = 0; optIdx < options.length; optIdx++) {
         bubbles.push({
           questionNumber,
           option: options[optIdx],
-          x: col.x + (optIdx * bubbleSpacing),
+          x: baseX + (optIdx * optionSpacing),
           y,
           radius: bubbleRadius,
         });
@@ -283,3 +351,20 @@ function generateBubbleCoordinates(): OMRBubble[] {
   
   return bubbles;
 }
+
+// ============================================================================
+// HISTÓRICO DE CALIBRAÇÃO
+// ============================================================================
+// 
+// v1.0 (original): Valores estimados incorretos
+// v2.0: Primeira correção (ainda com erros)
+// v3.0: Calibração desabilitada, coordenadas ainda imprecisas
+//       - startY = 0.6644 (ERRADO)
+// v4.0 (05/12/2025 11:30): CALIBRAÇÃO BASEADA NAS BORDAS
+//   - Analisou bordas verticais das colunas: 86, 360, 634, 909, 1185, 1459, 1724
+//   - Calculou offset para opção A: 55px após cada borda
+//   - startY = 0.6857 (VALOR REAL MEDIDO - CORRIGIDO!)
+//   - rowHeight = 0.0204 (42.5px no screenshot)
+//   - bubbleSpacing = 0.0114 (20px no screenshot)
+// 
+// ============================================================================

@@ -1,0 +1,104 @@
+{
+  "versao": "2.0",
+  "documento": "Cartão-Resposta ENEM (90 questões)",
+  "imagem": {
+    "largura_px": 2481,
+    "altura_px": 3509,
+    "dpi": 300,
+    "formato": "A4"
+  },
+  "gabarito": {
+    "y_inicio": 2400,
+    "y_fim": 3400,
+    "x_inicio": 50,
+    "x_fim": 2400
+  },
+  "circulo": {
+    "raio_px": 18.6,
+    "diametro_px": 37.3
+  },
+  "estrutura": {
+    "questoes": 90,
+    "alternativas": 5,
+    "blocos": 6,
+    "questoes_por_bloco": 15
+  },
+  "coordenadas": {
+    "y_linhas": [
+      2436,
+      2490,
+      2550,
+      2610,
+      2671,
+      2730,
+      2790,
+      2852,
+      2910,
+      2971,
+      3030,
+      3090,
+      3151,
+      3210,
+      3270
+    ],
+    "espacamento_y": 59.6,
+    "espacamento_x_alternativas": 61.1
+  },
+  "blocos": [
+    {
+      "id": 1,
+      "questoes": "Q01-Q15",
+      "x_A": 179,
+      "x_B": 240,
+      "x_C": 300,
+      "x_D": 361,
+      "x_E": 423
+    },
+    {
+      "id": 2,
+      "questoes": "Q16-Q30",
+      "x_A": 562,
+      "x_B": 622,
+      "x_C": 684,
+      "x_D": 746,
+      "x_E": 806
+    },
+    {
+      "id": 3,
+      "questoes": "Q31-Q45",
+      "x_A": 946,
+      "x_B": 1005,
+      "x_C": 1066,
+      "x_D": 1128,
+      "x_E": 1189
+    },
+    {
+      "id": 4,
+      "questoes": "Q46-Q60",
+      "x_A": 1330,
+      "x_B": 1389,
+      "x_C": 1450,
+      "x_D": 1512,
+      "x_E": 1572
+    },
+    {
+      "id": 5,
+      "questoes": "Q61-Q75",
+      "x_A": 1773,
+      "x_B": 1834,
+      "x_C": 1896,
+      "x_D": 1956,
+      "x_E": 2024
+    },
+    {
+      "id": 6,
+      "questoes": "Q76-Q90",
+      "x_A": 2096,
+      "x_B": 2156,
+      "x_C": 2218,
+      "x_D": 2280,
+      "x_E": 2339
+    }
+  ]
+}
+

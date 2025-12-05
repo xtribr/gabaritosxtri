@@ -83,3 +83,4 @@ const buffer = await ExcelExporter.generateExcel({
 - **Navegação Fácil**: Linhas/colunas congeladas
 - **Compatibilidade**: Excel 2007+ (.xlsx)
 
+

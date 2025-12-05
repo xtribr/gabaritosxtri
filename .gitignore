@@ -68,3 +68,6 @@ coverage/
 *.zip
 *.tar.gz
 *.rar
+venv/
+ocr_service/venv/
+python_omr_service/venv/

@@ -4,16 +4,153 @@ import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
 import { randomUUID } from "crypto";
-import * as XLSX from "xlsx";
 import { ExcelExporter } from "./src/reports/excelExporter.js";
-import Tesseract from "tesseract.js";
 import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
 import archiver from "archiver";
 import type { StudentData, ExamStatistics } from "@shared/schema";
 import { officialGabaritoTemplate } from "@shared/schema";
 import { processOMRPage, extractTextRegion, preprocessForOCR } from "./omr";
-import { readFileSync } from "fs";
+import { extractTextFromImageDeepSeek, checkOCRService } from "./deepseekOCR.js";
+import { callChatGPTVisionOMR } from "./chatgptOMR.js";
+import { registerDebugRoutes } from "./debugRoutes.js";
+
+// Configuração do serviço Python OMR
+const PYTHON_OMR_SERVICE_URL = process.env.PYTHON_OMR_URL || "http://localhost:5002";
+const USE_PYTHON_OMR = process.env.USE_PYTHON_OMR !== "false"; // Ativado por padrão
+
+/**
+ * Chama o serviço Python OMR para processar uma imagem
+ * @param imageBuffer Buffer da imagem PNG
+ * @param pageNumber Número da página
+ * @returns Resposta do OMR no formato do serviço Python
+ */
+async function callPythonOMR(imageBuffer: Buffer, pageNumber: number): Promise<{
+  status: string;
+  pagina?: {
+    pagina: number;
+    resultado: {
+      questoes: Record<string, string>;
+    };
+  };
+  mensagem?: string;
+}> {
+  try {
+    // Usar axios que tem melhor suporte para multipart/form-data
+    const axios = (await import("axios")).default;
+    const FormData = (await import("form-data")).default;
+    const formData = new FormData();
+    
+    // Adicionar imagem como buffer
+    formData.append("image", imageBuffer, {
+      filename: `page_${pageNumber}.png`,
+      contentType: "image/png",
+    });
+    
+    // Adicionar número da página como campo de formulário
+    formData.append("page", pageNumber.toString());
+
+    console.log(`[Python OMR] Enviando imagem de ${imageBuffer.length} bytes para página ${pageNumber}...`);
+    
+    // Usar axios que trata form-data corretamente
+    const response = await axios.post(
+      `${PYTHON_OMR_SERVICE_URL}/api/process-image`,
+      formData,
+      {
+        headers: {
+          ...formData.getHeaders(),
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      }
+    );
+
+    return response.data;
+  } catch (error: any) {
+    console.error(`[Python OMR] Erro ao chamar serviço:`, error);
+    if (error.response) {
+      throw new Error(`Serviço Python OMR retornou erro ${error.response.status}: ${JSON.stringify(error.response.data)}`);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Verifica se o serviço Python OMR está disponível
+ */
+async function checkPythonOMRService(): Promise<boolean> {
+  try {
+    const response = await fetch(`${PYTHON_OMR_SERVICE_URL}/health`, {
+      method: "GET",
+      signal: AbortSignal.timeout(3000), // 3 segundos timeout
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Converte resposta do Python OMR para formato interno
+ */
+function convertPythonOMRToInternal(
+  pythonResult: { 
+    status: string;
+    pagina?: { resultado: { questoes: Record<string, string> } };
+    mensagem?: string;
+  },
+  totalQuestions: number = 90
+): { detectedAnswers: (string | null)[]; overallConfidence: number; warnings: string[] } {
+  if (!pythonResult.pagina) {
+    return {
+      detectedAnswers: Array(totalQuestions).fill(null),
+      overallConfidence: 0,
+      warnings: [pythonResult.mensagem || "Erro ao processar com Python OMR"],
+    };
+  }
+  
+  const questoes = pythonResult.pagina.resultado.questoes;
+  const detectedAnswers: (string | null)[] = [];
+  const warnings: string[] = [];
+  let answeredCount = 0;
+  
+  // DEBUG: Log primeiras 10 questões recebidas do Python
+  console.log(`[DEBUG CONVERSION] Total de questões recebidas do Python: ${Object.keys(questoes).length}`);
+  const sampleKeys = Object.keys(questoes).slice(0, 10);
+  console.log(`[DEBUG CONVERSION] Primeiras 10 questões:`, sampleKeys.map(k => `${k}: "${questoes[k]}"`).join(", "));
+
+  for (let i = 1; i <= totalQuestions; i++) {
+    const answer = questoes[String(i)];
+    // Normalizar resposta: trim, uppercase, remover espaços
+    const normalizedAnswer = answer ? String(answer).trim().toUpperCase() : null;
+    
+    if (normalizedAnswer && normalizedAnswer !== "NÃO RESPONDEU" && /^[A-E]$/.test(normalizedAnswer)) {
+      detectedAnswers.push(normalizedAnswer);
+      answeredCount++;
+    } else {
+      detectedAnswers.push(null);
+      if (normalizedAnswer === "NÃO RESPONDEU" || answer === "Não respondeu") {
+        warnings.push(`Questão ${i}: Não respondida`);
+      } else if (answer && normalizedAnswer && !/^[A-E]$/.test(normalizedAnswer)) {
+        // DEBUG: Log respostas inválidas
+        if (i <= 10) {
+          console.log(`[DEBUG CONVERSION] Questão ${i}: Resposta inválida "${answer}" (normalizada: "${normalizedAnswer}")`);
+        }
+      }
+    }
+  }
+  
+  // DEBUG: Log estatísticas finais
+  console.log(`[DEBUG CONVERSION] Respostas válidas detectadas: ${answeredCount}/${totalQuestions}`);
+
+  const overallConfidence = answeredCount > 0 ? Math.min(0.95, 0.5 + (answeredCount / totalQuestions) * 0.45) : 0.3;
+
+  return {
+    detectedAnswers,
+    overallConfidence,
+    warnings: warnings.slice(0, 10), // Limitar warnings
+  };
+}
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 // Módulos organizados
@@ -138,34 +275,26 @@ interface OCRResult {
   words: Array<{
     text: string;
     confidence: number;
-    bbox: { x0: number; y0: number; x1: number; y1: number };
+    bbox?: { x0: number; y0: number; x1: number; y1: number };
   }>;
 }
 
 async function extractTextFromImage(imageBuffer: Buffer): Promise<OCRResult> {
   try {
-    const result = await Tesseract.recognize(imageBuffer, "por", {
-      logger: (m) => {
-        if (m.status === 'recognizing text') {
-          console.log(`OCR: ${Math.round(m.progress * 100)}%`);
-        }
-      },
-    });
-    
-    const data = result.data as { text: string; confidence: number; words?: Array<{ text: string; confidence: number; bbox: { x0: number; y0: number; x1: number; y1: number } }> };
-    const words = data.words?.map((word) => ({
-      text: word.text,
-      confidence: word.confidence,
-      bbox: word.bbox,
-    })) || [];
+    console.log("[OCR] Usando DeepSeek-OCR para extrair texto...");
+    const result = await extractTextFromImageDeepSeek(imageBuffer, "<image>\nFree OCR.");
     
     return {
-      text: data.text,
-      confidence: data.confidence,
-      words,
+      text: result.text,
+      confidence: result.confidence,
+      words: (result.words || []).map(w => ({
+        text: w.text,
+        confidence: w.confidence,
+        bbox: w.bbox,
+      })),
     };
   } catch (error) {
-    console.error("OCR Error:", error);
+    console.error("[OCR] Erro ao processar com DeepSeek-OCR:", error);
     return { text: "", confidence: 0, words: [] };
   }
 }
@@ -249,7 +378,7 @@ function parseStudentData(ocrResult: OCRResult, pageNumber: number): StudentData
         id: randomUUID(),
         studentNumber: `P${pageNumber.toString().padStart(3, "0")}`,
         studentName: `Aluno Página ${pageNumber}`,
-        answers: allAnswers.slice(0, 45),
+        answers: allAnswers.slice(0, officialGabaritoTemplate.totalQuestions),
         pageNumber,
         rawText: text.substring(0, 200),
         confidence: overallConfidence,
@@ -261,28 +390,68 @@ function parseStudentData(ocrResult: OCRResult, pageNumber: number): StudentData
 }
 
 // Async PDF processor function
-async function processPdfJob(jobId: string, pdfBuffer: Buffer, enableOcr: boolean = false) {
+async function processPdfJob(jobId: string, pdfBuffer: Buffer, enableOcr: boolean = false, enableChatGPT: boolean = false) {
   const job = jobs.get(jobId);
   if (!job) return;
 
-  let ocrWorker: Tesseract.Worker | null = null;
-
   try {
-    console.log(`[JOB ${jobId}] Iniciando processamento... (OCR: ${enableOcr ? 'ativado' : 'desativado'})`);
-    const pdfDoc = await PDFDocument.load(pdfBuffer);
-    const pageCount = pdfDoc.getPageCount();
+    console.log(`[JOB ${jobId}] Iniciando processamento... (OCR: ${enableOcr ? 'ativado (DeepSeek-OCR)' : 'desativado'}) | ChatGPT: ${enableChatGPT ? 'ativado' : 'desativado'}`);
     
-    job.totalPages = pageCount;
-    job.status = "processing";
-    console.log(`[JOB ${jobId}] PDF carregado com ${pageCount} página(s)`);
-
-    // Initialize shared OCR worker only if enabled
+    const chatgptEnabled = enableChatGPT && !!process.env.OPENAI_API_KEY;
+    if (enableChatGPT && !process.env.OPENAI_API_KEY) {
+      console.warn(`[JOB ${jobId}] ⚠️  ChatGPT habilitado, mas OPENAI_API_KEY não está definida. Assistente será ignorado.`);
+    }
+    
+    // Verificar se serviço Python OMR está disponível
+    let usePythonOMR = USE_PYTHON_OMR;
+    if (usePythonOMR) {
+      const pythonOMRAvailable = await checkPythonOMRService();
+      if (!pythonOMRAvailable) {
+        console.warn(`[JOB ${jobId}] ⚠️  Serviço Python OMR não está disponível em ${PYTHON_OMR_SERVICE_URL}`);
+        console.warn(`[JOB ${jobId}] Execute: cd python_omr_service && source venv/bin/activate && python app.py`);
+        console.warn(`[JOB ${jobId}] Usando OMR TypeScript como fallback...`);
+        usePythonOMR = false;
+      } else {
+        console.log(`[JOB ${jobId}] ✅ Serviço Python OMR disponível e pronto!`);
+      }
+    }
+    
+    // Verificar se DeepSeek-OCR está disponível
     if (enableOcr) {
-      console.log(`[JOB ${jobId}] Inicializando OCR worker...`);
-      ocrWorker = await Tesseract.createWorker("por", 1, {
-        logger: () => {}
-      });
-      console.log(`[JOB ${jobId}] OCR worker pronto!`);
+      const ocrAvailable = await checkOCRService();
+      if (!ocrAvailable) {
+        console.warn(`[JOB ${jobId}] ⚠️  DeepSeek-OCR não está disponível. Verifique se o serviço está rodando na porta 5001.`);
+        console.warn(`[JOB ${jobId}] Execute: cd ocr_service && ./start_ocr_service.sh`);
+        enableOcr = false; // Desabilitar OCR se serviço não disponível
+      } else {
+        console.log(`[JOB ${jobId}] ✅ DeepSeek-OCR disponível e pronto!`);
+      }
+    }
+    
+    // Carregar PDF (já foi validado no endpoint, mas recarregamos para processar)
+    let pdfDoc: PDFDocument;
+    let pageCount: number;
+    
+    try {
+      pdfDoc = await PDFDocument.load(pdfBuffer);
+      pageCount = pdfDoc.getPageCount();
+      
+      if (pageCount === 0) {
+        throw new Error("PDF não contém páginas ou está corrompido");
+      }
+      
+      // Garantir que totalPages está definido (já deveria estar, mas garantir)
+      if (job.totalPages === 0) {
+        job.totalPages = pageCount;
+      }
+      
+      job.status = "processing";
+      console.log(`[JOB ${jobId}] PDF carregado com ${pageCount} página(s)`);
+    } catch (pdfError) {
+      console.error(`[JOB ${jobId}] Erro ao carregar PDF:`, pdfError);
+      job.status = "error";
+      job.errorMessage = pdfError instanceof Error ? pdfError.message : "Erro ao carregar o PDF. Por favor, tente novamente.";
+      return;
     }
 
     const { exec } = await import("child_process");
@@ -321,15 +490,83 @@ async function processPdfJob(jobId: string, pdfBuffer: Buffer, enableOcr: boolea
         await fs.unlink(tempPdfPath).catch(() => {});
         await fs.unlink(`${tempPngPath}.png`).catch(() => {});
 
-        // Process OMR
-        const omrResult = await processOMRPage(imageBuffer, officialGabaritoTemplate);
-        console.log(`[JOB ${jobId}] Página ${pageNumber}: ${omrResult.detectedAnswers.filter(a => a).length} respostas detectadas`);
+        // Process OMR - usar Python OMR se disponível, senão usar TypeScript
+        let omrResult;
+        if (usePythonOMR) {
+          try {
+            console.log(`[JOB ${jobId}] Chamando serviço Python OMR para página ${pageNumber}...`);
+            const pythonResult = await callPythonOMR(imageBuffer, pageNumber);
+            
+            omrResult = convertPythonOMRToInternal(pythonResult, officialGabaritoTemplate.totalQuestions);
+            
+            if (pythonResult.status === "sucesso" && pythonResult.pagina) {
+              console.log(`[JOB ${jobId}] Página ${pageNumber} (Python OMR): ${omrResult.detectedAnswers.filter(a => a).length} respostas detectadas`);
+            } else {
+              throw new Error(pythonResult.mensagem || "Erro desconhecido no serviço Python OMR");
+            }
+          } catch (pythonError) {
+            console.error(`[JOB ${jobId}] Erro no Python OMR, usando fallback TypeScript:`, pythonError);
+            // Fallback para OMR TypeScript
+            omrResult = await processOMRPage(imageBuffer, officialGabaritoTemplate);
+            console.log(`[JOB ${jobId}] Página ${pageNumber} (TypeScript OMR fallback): ${omrResult.detectedAnswers.filter(a => a).length} respostas detectadas`);
+          }
+        } else {
+          // Usar OMR TypeScript diretamente
+          omrResult = await processOMRPage(imageBuffer, officialGabaritoTemplate);
+          console.log(`[JOB ${jobId}] Página ${pageNumber} (TypeScript OMR): ${omrResult.detectedAnswers.filter(a => a).length} respostas detectadas`);
+        }
 
-        // Extract text fields using OCR (with shared worker)
+        // ChatGPT vision assist (opcional) - VALIDA E CORRIGE OMR
+        let aiAssist: { answers: Array<string | null>; corrections?: any[]; rawText: string; model: string } | null = null;
+        let mergedAnswers: Array<string | null> = [...omrResult.detectedAnswers];
+        let correctionLog: string[] = [];
+        
+        if (chatgptEnabled) {
+          try {
+            // Passar respostas do OMR para o ChatGPT validar e corrigir
+            aiAssist = await callChatGPTVisionOMR(
+              imageBuffer, 
+              officialGabaritoTemplate.totalQuestions,
+              omrResult.detectedAnswers
+            );
+            
+            console.log(`[JOB ${jobId}] ChatGPT (${aiAssist.model}) analisou e corrigiu.`);
+            
+            // Aplicar correções do ChatGPT
+            if (aiAssist.answers.length === mergedAnswers.length) {
+              let corrected = 0;
+              mergedAnswers = aiAssist.answers.map((aiAns, idx) => {
+                const omrAns = omrResult.detectedAnswers[idx];
+                // Se ChatGPT discorda do OMR, usar a correção do ChatGPT
+                if (aiAns !== omrAns) {
+                  corrected++;
+                  const logEntry = `Q${idx + 1}: OMR="${omrAns || 'vazio'}" → ChatGPT="${aiAns || 'vazio'}"`;
+                  correctionLog.push(logEntry);
+                  console.log(`[JOB ${jobId}] ${logEntry}`);
+                }
+                return aiAns; // Usar sempre a resposta do ChatGPT (validada/corrigida)
+              });
+              
+              if (corrected > 0) {
+                console.log(`[JOB ${jobId}] ChatGPT corrigiu ${corrected} respostas do OMR.`);
+              } else {
+                console.log(`[JOB ${jobId}] ChatGPT confirmou todas as ${mergedAnswers.filter(a => a).length} respostas do OMR.`);
+              }
+              
+              if (aiAssist.corrections && aiAssist.corrections.length > 0) {
+                console.log(`[JOB ${jobId}] Detalhes das correções:`, JSON.stringify(aiAssist.corrections, null, 2));
+              }
+            }
+          } catch (aiError) {
+            console.warn(`[JOB ${jobId}] ChatGPT validação falhou, mantendo OMR original:`, aiError);
+          }
+        }
+
+        // Extract text fields using DeepSeek-OCR
         let studentName = `Aluno ${pageNumber}`;
         let studentNumber = `P${pageNumber.toString().padStart(3, "0")}`;
         
-        if (ocrWorker) {
+        if (enableOcr) {
           try {
             const nameField = officialGabaritoTemplate.textFields.find(f => f.name === "nomeCompleto");
             const numberField = officialGabaritoTemplate.textFields.find(f => f.name === "numero");
@@ -340,16 +577,20 @@ async function processPdfJob(jobId: string, pdfBuffer: Buffer, enableOcr: boolea
               numberField ? extractTextRegion(imageBuffer, numberField.region).then(preprocessForOCR) : null,
             ]);
             
-            // Run OCR on both regions using shared worker
-            const ocrPromises: Promise<Tesseract.RecognizeResult>[] = [];
-            if (nameRegion) ocrPromises.push(ocrWorker.recognize(nameRegion));
-            if (numberRegion) ocrPromises.push(ocrWorker.recognize(numberRegion));
+            // Run DeepSeek-OCR on both regions
+            const ocrPromises: Promise<OCRResult>[] = [];
+            if (nameRegion) {
+              ocrPromises.push(extractTextFromImageDeepSeek(nameRegion, "<image>\nExtract the student name clearly."));
+            }
+            if (numberRegion) {
+              ocrPromises.push(extractTextFromImageDeepSeek(numberRegion, "<image>\nExtract the student number or ID clearly."));
+            }
             
             const ocrResults = await Promise.all(ocrPromises);
             
             // Extract name (first result if nameRegion was processed)
             if (nameRegion && ocrResults.length > 0) {
-              const rawName = ocrResults[0].data.text.trim().replace(/[^a-zA-ZÀ-ÿ\s]/g, '').trim();
+              const rawName = ocrResults[0].text.trim().replace(/[^a-zA-ZÀ-ÿ\s]/g, '').trim();
               // Validate: must be 3+ chars, have at least one word with 2+ letters, not be form text
               const words = rawName.split(/\s+/).filter(w => w.length >= 2);
               const isValidName = rawName.length >= 3 && 
@@ -361,32 +602,39 @@ async function processPdfJob(jobId: string, pdfBuffer: Buffer, enableOcr: boolea
                                   !rawName.toLowerCase().includes('unidade');
               if (isValidName) {
                 studentName = rawName.substring(0, 100);
-                console.log(`[JOB ${jobId}] Nome: "${studentName}"`);
+                console.log(`[JOB ${jobId}] Nome (DeepSeek-OCR): "${studentName}" (confiança: ${(ocrResults[0].confidence * 100).toFixed(1)}%)`);
               }
             }
             
             // Extract number (second result if both were processed, or first if only number)
             const numIdx = nameRegion ? 1 : 0;
             if (numberRegion && ocrResults.length > numIdx) {
-              const extractedNumber = ocrResults[numIdx].data.text.trim().replace(/\D/g, '');
+              const extractedNumber = ocrResults[numIdx].text.trim().replace(/\D/g, '');
               if (extractedNumber.length >= 1) {
                 studentNumber = extractedNumber.substring(0, 20);
-                console.log(`[JOB ${jobId}] Número: "${studentNumber}"`);
+                console.log(`[JOB ${jobId}] Número (DeepSeek-OCR): "${studentNumber}" (confiança: ${(ocrResults[numIdx].confidence * 100).toFixed(1)}%)`);
               }
             }
           } catch (ocrError) {
-            console.log(`[JOB ${jobId}] OCR: usando valores padrão`);
+            console.log(`[JOB ${jobId}] OCR (DeepSeek): erro, usando valores padrão:`, ocrError);
           }
         }
+
+        const finalAnswers = mergedAnswers.map(ans => (ans ?? ""));
 
         const student: StudentData = {
           id: randomUUID(),
           studentNumber,
           studentName,
-          answers: omrResult.detectedAnswers,
+          answers: finalAnswers,
+          aiAnswers: aiAssist?.answers.map(a => (a ?? "")),
+          aiModel: aiAssist?.model,
+          aiRaw: aiAssist?.rawText,
           pageNumber,
           confidence: Math.round(omrResult.overallConfidence * 100),
-          rawText: omrResult.warnings.length > 0 ? omrResult.warnings.join("; ") : undefined,
+          rawText: correctionLog.length > 0 
+            ? `Correções ChatGPT: ${correctionLog.join("; ")}` 
+            : (omrResult.warnings.length > 0 ? omrResult.warnings.join("; ") : undefined),
         };
 
         job.students.push(student);
@@ -407,13 +655,8 @@ async function processPdfJob(jobId: string, pdfBuffer: Buffer, enableOcr: boolea
     job.status = "error";
     job.errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
   } finally {
-    // Cleanup OCR worker
-    if (ocrWorker) {
-      try {
-        await ocrWorker.terminate();
-        console.log(`[JOB ${jobId}] OCR worker encerrado`);
-      } catch {}
-    }
+    // DeepSeek-OCR não precisa de cleanup (é um serviço externo)
+    console.log(`[JOB ${jobId}] Processamento finalizado`);
   }
 }
 
@@ -421,6 +664,10 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  
+  // Registrar rotas de debug
+  registerDebugRoutes(app);
+  
   // Start PDF processing - returns jobId immediately
   app.post("/api/process-pdf", upload.single("pdf"), async (req: Request, res: Response) => {
     try {
@@ -435,15 +682,35 @@ export async function registerRoutes(
 
       // Check if OCR is enabled (from form field)
       const enableOcr = req.body?.enableOcr === 'true' || req.body?.enableOcr === true;
+      // Optional ChatGPT vision assist
+      const enableChatGPT = req.body?.enableChatGPT === 'true' || req.body?.enableChatGPT === true;
 
       // Create job
       const jobId = randomUUID();
+      
+      // Tentar carregar PDF para obter pageCount imediatamente
+      let initialPageCount = 0;
+      try {
+        const pdfDoc = await PDFDocument.load(req.file.buffer);
+        initialPageCount = pdfDoc.getPageCount();
+        if (initialPageCount === 0) {
+          res.status(400).json({ error: "PDF não contém páginas ou está corrompido" });
+          return;
+        }
+      } catch (pdfError) {
+        console.error("[PDF] Erro ao carregar PDF:", pdfError);
+        res.status(400).json({ 
+          error: pdfError instanceof Error ? pdfError.message : "Erro ao carregar o PDF. Por favor, tente novamente." 
+        });
+        return;
+      }
+      
       const job: ProcessingJob = {
         id: jobId,
         status: "queued",
         progress: 0,
         currentPage: 0,
-        totalPages: 0,
+        totalPages: initialPageCount,
         students: [],
         warnings: [],
         createdAt: new Date(),
@@ -452,7 +719,7 @@ export async function registerRoutes(
 
       // Start processing in background
       const pdfBuffer = req.file.buffer;
-      setImmediate(() => processPdfJob(jobId, pdfBuffer, enableOcr));
+      setImmediate(() => processPdfJob(jobId, pdfBuffer, enableOcr, enableChatGPT));
 
       // Return immediately
       res.json({ jobId, message: "Processamento iniciado" });
@@ -942,6 +1209,36 @@ export async function registerRoutes(
 
   app.get("/api/health", (req: Request, res: Response) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // Debug endpoint: Visualizar onde as bolhas estão sendo procuradas
+  app.post("/api/debug-omr-overlay", upload.single("image"), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        res.status(400).json({ error: "Nenhuma imagem enviada" });
+        return;
+      }
+
+      const imageBuffer = req.file.buffer;
+      const { createDebugImage } = await import("./omr.js");
+      const { officialGabaritoTemplate } = await import("@shared/schema");
+      
+      // Processar OMR para obter resultados
+      const { processOMRPage } = await import("./omr.js");
+      const omrResult = await processOMRPage(imageBuffer, officialGabaritoTemplate);
+      
+      // Criar imagem de debug com overlay
+      const debugImage = await createDebugImage(imageBuffer, omrResult, officialGabaritoTemplate);
+      
+      res.setHeader("Content-Type", "image/png");
+      res.send(debugImage);
+    } catch (error) {
+      console.error("[DEBUG-OMR] Erro:", error);
+      res.status(500).json({ 
+        error: "Erro ao gerar overlay de debug",
+        details: error instanceof Error ? error.message : "Erro desconhecido"
+      });
+    }
   });
 
   // Endpoint to get TRI estimate with coherence (Two-Pass Algorithm)

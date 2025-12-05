@@ -1,0 +1,232 @@
+/Users/xandao/Desktop/OCR XTRI GABARITO/gabaritosxtri/python_omr_service/venv/lib/python3.9/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+2025-12-05 18:48:27,310 - __main__ - INFO - Iniciando serviço OMR com baddrow-python...
+2025-12-05 18:48:27,310 - __main__ - INFO - Templates disponíveis: ['enem45', 'enem90', 'enem90_v5'] | padrão=enem90_v5
+2025-12-05 18:48:27,310 - __main__ - INFO - Servidor rodando em: http://0.0.0.0:5002
+ * Serving Flask app 'app'
+ * Debug mode: off
+2025-12-05 18:48:27,314 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5002
+ * Running on http://192.168.0.18:5002
+2025-12-05 18:48:27,314 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-05 18:48:29,581 - werkzeug - INFO - 127.0.0.1 - - [05/Dec/2025 18:48:29] "GET /health HTTP/1.1" 200 -
+2025-12-05 18:48:32,365 - werkzeug - INFO - 127.0.0.1 - - [05/Dec/2025 18:48:32] "GET /health HTTP/1.1" 200 -
+2025-12-05 18:48:36,957 - werkzeug - INFO - 127.0.0.1 - - [05/Dec/2025 18:48:36] "GET /health HTTP/1.1" 200 -
+2025-12-05 18:48:56,022 - __main__ - INFO - [DEBUG] Recebida imagem: 3693525 bytes | filename=test.png
+2025-12-05 18:48:56,163 - __main__ - INFO - [DEBUG] Imagem convertida: shape=(3509, 2481, 3) | dtype=uint8
+2025-12-05 18:48:56,163 - __main__ - INFO - [DEBUG] Processando página 1 | template=enem90_v5 | debug=False | yolo=False | chatgpt=False...
+2025-12-05 18:48:56,163 - __main__ - INFO - [DEBUG] Processando página 1: 2481x3509 pixels | template=enem90_v5 | yolo=False | debug=False
+2025-12-05 18:48:56,163 - __main__ - INFO - [DEBUG] Tentando alinhamento por marcadores...
+2025-12-05 18:48:56,169 - __main__ - WARNING - [DEBUG] ⚠️  Alinhamento não aplicado (marks_not_found)
+2025-12-05 18:48:56,169 - __main__ - INFO - [DEBUG] Pré-processando imagem (grayscale, autocontrast, sharpen, threshold)...
+2025-12-05 18:48:56,243 - __main__ - INFO - [DEBUG] Imagem pré-processada: (3509, 2481) | min=0, max=1
+2025-12-05 18:48:56,243 - __main__ - INFO - [DEBUG] Detectando bolhas usando coordenadas fixas do template...
+2025-12-05 18:48:56,243 - __main__ - INFO - [DEBUG] Template ENEM90: scale_x=1.000, scale_y=1.000, radius=19px (ref=19)
+2025-12-05 18:48:56,243 - __main__ - INFO - [DEBUG Q1] Darkness: {'A': 0.999780022812449, 'B': 0.9973874314268644, 'C': 0.9972434957362447, 'D': 0.9972842322524578, 'E': 0.99727065341372} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:48:56,243 - __main__ - INFO - [DEBUG Q2] Darkness: {'A': 0.9972815164847103, 'B': 0.9974037260333497, 'C': 0.9972597903427298, 'D': 0.9973168214654283, 'E': 0.9996904024767802} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 18:48:56,243 - __main__ - INFO - [DEBUG Q3] Darkness: {'A': 0.999799033186682, 'B': 0.9973982944978546, 'C': 0.9972543588072348, 'D': 0.9972950953234478, 'E': 0.9972679376459725} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:48:56,243 - __main__ - INFO - [DEBUG Q4] Darkness: {'A': 0.9972679376459725, 'B': 0.9974227364075824, 'C': 0.9972625061104774, 'D': 0.9973059583944381, 'E': 0.999709412851013} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 18:48:56,243 - __main__ - INFO - [DEBUG Q5] Darkness: {'A': 0.9997311389929933, 'B': 0.9974010102656021, 'C': 0.9972679376459725, 'D': 0.9972950953234478, 'E': 0.9972760849492152} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:48:56,245 - __main__ - INFO - [DEBUG] ✅ Página 1 (OpenCV): 90/90 respostas marcadas
+2025-12-05 18:48:56,245 - __main__ - INFO - [DEBUG] ✅ Página 1 processada com sucesso
+2025-12-05 18:48:56,246 - werkzeug - INFO - 127.0.0.1 - - [05/Dec/2025 18:48:56] "POST /api/process-image HTTP/1.1" 200 -
+2025-12-05 18:49:42,081 - werkzeug - INFO - 127.0.0.1 - - [05/Dec/2025 18:49:42] "GET /health HTTP/1.1" 200 -
+2025-12-05 18:49:42,225 - werkzeug - INFO - 127.0.0.1 - - [05/Dec/2025 18:49:42] "GET /health HTTP/1.1" 200 -
+2025-12-05 18:50:31,944 - __main__ - INFO - [DEBUG] Recebida imagem: 3693525 bytes | filename=test.png
+2025-12-05 18:50:32,080 - __main__ - INFO - [DEBUG] Imagem convertida: shape=(3509, 2481, 3) | dtype=uint8
+2025-12-05 18:50:32,080 - __main__ - INFO - [DEBUG] Processando página 1 | template=enem90_v5 | debug=False | yolo=False | chatgpt=False...
+2025-12-05 18:50:32,080 - __main__ - INFO - [DEBUG] Processando página 1: 2481x3509 pixels | template=enem90_v5 | yolo=False | debug=False
+2025-12-05 18:50:32,080 - __main__ - INFO - [DEBUG] Tentando alinhamento por marcadores...
+2025-12-05 18:50:32,085 - __main__ - WARNING - [DEBUG] ⚠️  Alinhamento não aplicado (marks_not_found)
+2025-12-05 18:50:32,085 - __main__ - INFO - [DEBUG] Pré-processando imagem (grayscale, autocontrast, sharpen, threshold)...
+2025-12-05 18:50:32,157 - __main__ - INFO - [DEBUG] Imagem pré-processada: (3509, 2481) | min=0, max=1
+2025-12-05 18:50:32,157 - __main__ - INFO - [DEBUG] Detectando bolhas usando coordenadas fixas do template...
+2025-12-05 18:50:32,157 - __main__ - INFO - [DEBUG] Template ENEM90: scale_x=1.000, scale_y=1.000, radius=19px (ref=19)
+2025-12-05 18:50:32,157 - __main__ - INFO - [DEBUG Q1] Darkness: {'A': 0.999780022812449, 'B': 0.9973874314268644, 'C': 0.9972434957362447, 'D': 0.9972842322524578, 'E': 0.99727065341372} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:50:32,158 - __main__ - INFO - [DEBUG Q2] Darkness: {'A': 0.9972815164847103, 'B': 0.9974037260333497, 'C': 0.9972597903427298, 'D': 0.9973168214654283, 'E': 0.9996904024767802} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 18:50:32,158 - __main__ - INFO - [DEBUG Q3] Darkness: {'A': 0.999799033186682, 'B': 0.9973982944978546, 'C': 0.9972543588072348, 'D': 0.9972950953234478, 'E': 0.9972679376459725} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:50:32,158 - __main__ - INFO - [DEBUG Q4] Darkness: {'A': 0.9972679376459725, 'B': 0.9974227364075824, 'C': 0.9972625061104774, 'D': 0.9973059583944381, 'E': 0.999709412851013} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 18:50:32,158 - __main__ - INFO - [DEBUG Q5] Darkness: {'A': 0.9997311389929933, 'B': 0.9974010102656021, 'C': 0.9972679376459725, 'D': 0.9972950953234478, 'E': 0.9972760849492152} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:50:32,159 - __main__ - INFO - [DEBUG] ✅ Página 1 (OpenCV): 90/90 respostas marcadas
+2025-12-05 18:50:32,159 - __main__ - INFO - [DEBUG] ✅ Página 1 processada com sucesso
+2025-12-05 18:50:32,160 - werkzeug - INFO - 127.0.0.1 - - [05/Dec/2025 18:50:32] "POST /api/process-image HTTP/1.1" 200 -
+2025-12-05 18:51:37,148 - werkzeug - INFO - 127.0.0.1 - - [05/Dec/2025 18:51:37] "GET /health HTTP/1.1" 200 -
+2025-12-05 18:51:37,598 - __main__ - INFO - [DEBUG] Recebida imagem: 1380481 bytes | filename=page_1.png
+2025-12-05 18:51:37,662 - __main__ - INFO - [DEBUG] Imagem convertida: shape=(1755, 1241, 3) | dtype=uint8
+2025-12-05 18:51:37,662 - __main__ - INFO - [DEBUG] Processando página 1 | template=enem90_v5 | debug=False | yolo=False | chatgpt=False...
+2025-12-05 18:51:37,662 - __main__ - INFO - [DEBUG] Processando página 1: 1241x1755 pixels | template=enem90_v5 | yolo=False | debug=False
+2025-12-05 18:51:37,662 - __main__ - INFO - [DEBUG] Tentando alinhamento por marcadores...
+2025-12-05 18:51:37,664 - __main__ - WARNING - [DEBUG] ⚠️  Alinhamento não aplicado (marks_not_found)
+2025-12-05 18:51:37,664 - __main__ - INFO - [DEBUG] Pré-processando imagem (grayscale, autocontrast, sharpen, threshold)...
+2025-12-05 18:51:37,686 - __main__ - INFO - [DEBUG] Imagem pré-processada: (1755, 1241) | min=0, max=1
+2025-12-05 18:51:37,686 - __main__ - INFO - [DEBUG] Detectando bolhas usando coordenadas fixas do template...
+2025-12-05 18:51:37,686 - __main__ - INFO - [DEBUG] Template ENEM90: scale_x=0.500, scale_y=0.500, radius=9px (ref=19)
+2025-12-05 18:51:37,686 - __main__ - INFO - [DEBUG Q1] Darkness: {'A': 0.9999031711450013, 'B': 0.997361413701283, 'C': 0.9972282740256597, 'D': 0.9972524812394093, 'E': 0.9973251028806585} | Max: 1.000 | Diff: 0.003 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:51:37,686 - __main__ - INFO - [DEBUG Q2] Darkness: {'A': 0.9972282740256597, 'B': 0.9972887920600338, 'C': 0.9972403776325345, 'D': 0.9972887920600338, 'E': 0.9997579278625031} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 18:51:37,686 - __main__ - INFO - [DEBUG Q3] Darkness: {'A': 0.9999394819656257, 'B': 0.9972645848462842, 'C': 0.9972403776325345, 'D': 0.9972524812394093, 'E': 0.9972524812394093} | Max: 1.000 | Diff: 0.003 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:51:37,687 - __main__ - INFO - [DEBUG Q4] Darkness: {'A': 0.9971435487775356, 'B': 0.9972887920600338, 'C': 0.9972161704187849, 'D': 0.9973251028806585, 'E': 0.9996974098281287} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 18:51:37,687 - __main__ - INFO - [DEBUG Q5] Darkness: {'A': 0.9997216170418785, 'B': 0.9972887920600338, 'C': 0.9972403776325345, 'D': 0.9972403776325345, 'E': 0.997276688453159} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:51:37,688 - __main__ - INFO - [DEBUG] ✅ Página 1 (OpenCV): 90/90 respostas marcadas
+2025-12-05 18:51:37,688 - __main__ - INFO - [DEBUG] ✅ Página 1 processada com sucesso
+2025-12-05 18:51:37,689 - werkzeug - INFO - 127.0.0.1 - - [05/Dec/2025 18:51:37] "POST /api/process-image HTTP/1.1" 200 -
+2025-12-05 18:53:02,313 - __main__ - INFO - [DEBUG] Recebida imagem: 3693525 bytes | filename=test.png
+2025-12-05 18:53:02,460 - __main__ - INFO - [DEBUG] Imagem convertida: shape=(3509, 2481, 3) | dtype=uint8
+2025-12-05 18:53:02,460 - __main__ - INFO - [DEBUG] Processando página 1 | template=enem90_v5 | debug=False | yolo=False | chatgpt=False...
+2025-12-05 18:53:02,460 - __main__ - INFO - [DEBUG] Processando página 1: 2481x3509 pixels | template=enem90_v5 | yolo=False | debug=False
+2025-12-05 18:53:02,460 - __main__ - INFO - [DEBUG] Tentando alinhamento por marcadores...
+2025-12-05 18:53:02,466 - __main__ - WARNING - [DEBUG] ⚠️  Alinhamento não aplicado (marks_not_found)
+2025-12-05 18:53:02,466 - __main__ - INFO - [DEBUG] Pré-processando imagem (grayscale, autocontrast, sharpen, threshold)...
+2025-12-05 18:53:02,545 - __main__ - INFO - [DEBUG] Imagem pré-processada: (3509, 2481) | min=0, max=1
+2025-12-05 18:53:02,545 - __main__ - INFO - [DEBUG] Detectando bolhas usando coordenadas fixas do template...
+2025-12-05 18:53:02,545 - __main__ - INFO - [DEBUG] Template ENEM90: scale_x=1.000, scale_y=1.000, radius=19px (ref=19)
+2025-12-05 18:53:02,545 - __main__ - INFO - [DEBUG Q1] Darkness: {'A': 0.999780022812449, 'B': 0.9973874314268644, 'C': 0.9972434957362447, 'D': 0.9972842322524578, 'E': 0.99727065341372} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:53:02,545 - __main__ - INFO - [DEBUG Q2] Darkness: {'A': 0.9972815164847103, 'B': 0.9974037260333497, 'C': 0.9972597903427298, 'D': 0.9973168214654283, 'E': 0.9996904024767802} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 18:53:02,545 - __main__ - INFO - [DEBUG Q3] Darkness: {'A': 0.999799033186682, 'B': 0.9973982944978546, 'C': 0.9972543588072348, 'D': 0.9972950953234478, 'E': 0.9972679376459725} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:53:02,545 - __main__ - INFO - [DEBUG Q4] Darkness: {'A': 0.9972679376459725, 'B': 0.9974227364075824, 'C': 0.9972625061104774, 'D': 0.9973059583944381, 'E': 0.999709412851013} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 18:53:02,545 - __main__ - INFO - [DEBUG Q5] Darkness: {'A': 0.9997311389929933, 'B': 0.9974010102656021, 'C': 0.9972679376459725, 'D': 0.9972950953234478, 'E': 0.9972760849492152} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:53:02,547 - __main__ - INFO - [DEBUG] ✅ Página 1 (OpenCV): 90/90 respostas marcadas
+2025-12-05 18:53:02,547 - __main__ - INFO - [DEBUG] ✅ Página 1 processada com sucesso
+2025-12-05 18:53:02,548 - werkzeug - INFO - 127.0.0.1 - - [05/Dec/2025 18:53:02] "POST /api/process-image HTTP/1.1" 200 -
+2025-12-05 18:55:42,463 - __main__ - INFO - [DEBUG] Recebida imagem: 3693525 bytes | filename=test.png
+2025-12-05 18:55:42,598 - __main__ - INFO - [DEBUG] Imagem convertida: shape=(3509, 2481, 3) | dtype=uint8
+2025-12-05 18:55:42,598 - __main__ - INFO - [DEBUG] Processando página 1 | template=enem90_v5 | debug=False | yolo=False | chatgpt=False...
+2025-12-05 18:55:42,598 - __main__ - INFO - [DEBUG] Processando página 1: 2481x3509 pixels | template=enem90_v5 | yolo=False | debug=False
+2025-12-05 18:55:42,598 - __main__ - INFO - [DEBUG] Tentando alinhamento por marcadores...
+2025-12-05 18:55:42,604 - __main__ - WARNING - [DEBUG] ⚠️  Alinhamento não aplicado (marks_not_found)
+2025-12-05 18:55:42,604 - __main__ - INFO - [DEBUG] Pré-processando imagem (grayscale, autocontrast, sharpen, threshold)...
+2025-12-05 18:55:42,675 - __main__ - INFO - [DEBUG] Imagem pré-processada: (3509, 2481) | min=0, max=1
+2025-12-05 18:55:42,675 - __main__ - INFO - [DEBUG] Detectando bolhas usando coordenadas fixas do template...
+2025-12-05 18:55:42,675 - __main__ - INFO - [DEBUG] Template ENEM90: scale_x=1.000, scale_y=1.000, radius=19px (ref=19)
+2025-12-05 18:55:42,675 - __main__ - INFO - [DEBUG Q1] Darkness: {'A': 0.999780022812449, 'B': 0.9973874314268644, 'C': 0.9972434957362447, 'D': 0.9972842322524578, 'E': 0.99727065341372} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:55:42,675 - __main__ - INFO - [DEBUG Q2] Darkness: {'A': 0.9972815164847103, 'B': 0.9974037260333497, 'C': 0.9972597903427298, 'D': 0.9973168214654283, 'E': 0.9996904024767802} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 18:55:42,675 - __main__ - INFO - [DEBUG Q3] Darkness: {'A': 0.999799033186682, 'B': 0.9973982944978546, 'C': 0.9972543588072348, 'D': 0.9972950953234478, 'E': 0.9972679376459725} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:55:42,676 - __main__ - INFO - [DEBUG Q4] Darkness: {'A': 0.9972679376459725, 'B': 0.9974227364075824, 'C': 0.9972625061104774, 'D': 0.9973059583944381, 'E': 0.999709412851013} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 18:55:42,676 - __main__ - INFO - [DEBUG Q5] Darkness: {'A': 0.9997311389929933, 'B': 0.9974010102656021, 'C': 0.9972679376459725, 'D': 0.9972950953234478, 'E': 0.9972760849492152} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:55:42,677 - __main__ - INFO - [DEBUG] ✅ Página 1 (OpenCV): 90/90 respostas marcadas
+2025-12-05 18:55:42,677 - __main__ - INFO - [DEBUG] ✅ Página 1 processada com sucesso
+2025-12-05 18:55:42,678 - werkzeug - INFO - 127.0.0.1 - - [05/Dec/2025 18:55:42] "POST /api/process-image HTTP/1.1" 200 -
+2025-12-05 18:56:06,461 - __main__ - INFO - [DEBUG] Recebida imagem: 3693525 bytes | filename=test.png
+2025-12-05 18:56:06,592 - __main__ - INFO - [DEBUG] Imagem convertida: shape=(3509, 2481, 3) | dtype=uint8
+2025-12-05 18:56:06,592 - __main__ - INFO - [DEBUG] Processando página 1 | template=enem90_v5 | debug=False | yolo=False | chatgpt=False...
+2025-12-05 18:56:06,592 - __main__ - INFO - [DEBUG] Processando página 1: 2481x3509 pixels | template=enem90_v5 | yolo=False | debug=False
+2025-12-05 18:56:06,592 - __main__ - INFO - [DEBUG] Tentando alinhamento por marcadores...
+2025-12-05 18:56:06,597 - __main__ - WARNING - [DEBUG] ⚠️  Alinhamento não aplicado (marks_not_found)
+2025-12-05 18:56:06,597 - __main__ - INFO - [DEBUG] Pré-processando imagem (grayscale, autocontrast, sharpen, threshold)...
+2025-12-05 18:56:06,669 - __main__ - INFO - [DEBUG] Imagem pré-processada: (3509, 2481) | min=0, max=1
+2025-12-05 18:56:06,669 - __main__ - INFO - [DEBUG] Detectando bolhas usando coordenadas fixas do template...
+2025-12-05 18:56:06,669 - __main__ - INFO - [DEBUG] Template ENEM90: scale_x=1.000, scale_y=1.000, radius=19px (ref=19)
+2025-12-05 18:56:06,669 - __main__ - INFO - [DEBUG Q1] Darkness: {'A': 0.999780022812449, 'B': 0.9973874314268644, 'C': 0.9972434957362447, 'D': 0.9972842322524578, 'E': 0.99727065341372} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:56:06,669 - __main__ - INFO - [DEBUG Q2] Darkness: {'A': 0.9972815164847103, 'B': 0.9974037260333497, 'C': 0.9972597903427298, 'D': 0.9973168214654283, 'E': 0.9996904024767802} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 18:56:06,669 - __main__ - INFO - [DEBUG Q3] Darkness: {'A': 0.999799033186682, 'B': 0.9973982944978546, 'C': 0.9972543588072348, 'D': 0.9972950953234478, 'E': 0.9972679376459725} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:56:06,669 - __main__ - INFO - [DEBUG Q4] Darkness: {'A': 0.9972679376459725, 'B': 0.9974227364075824, 'C': 0.9972625061104774, 'D': 0.9973059583944381, 'E': 0.999709412851013} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 18:56:06,669 - __main__ - INFO - [DEBUG Q5] Darkness: {'A': 0.9997311389929933, 'B': 0.9974010102656021, 'C': 0.9972679376459725, 'D': 0.9972950953234478, 'E': 0.9972760849492152} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:56:06,671 - __main__ - INFO - [DEBUG] ✅ Página 1 (OpenCV): 90/90 respostas marcadas
+2025-12-05 18:56:06,671 - __main__ - INFO - [DEBUG] ✅ Página 1 processada com sucesso
+2025-12-05 18:56:06,672 - werkzeug - INFO - 127.0.0.1 - - [05/Dec/2025 18:56:06] "POST /api/process-image HTTP/1.1" 200 -
+2025-12-05 18:59:08,846 - __main__ - INFO - [DEBUG] Recebida imagem: 3693525 bytes | filename=gabarito.png
+2025-12-05 18:59:08,981 - __main__ - INFO - [DEBUG] Imagem convertida: shape=(3509, 2481, 3) | dtype=uint8
+2025-12-05 18:59:08,981 - __main__ - INFO - [DEBUG] Processando página 1 | template=enem90_v5 | debug=False | yolo=False | chatgpt=False...
+2025-12-05 18:59:08,981 - __main__ - INFO - [DEBUG] Processando página 1: 2481x3509 pixels | template=enem90_v5 | yolo=False | debug=False
+2025-12-05 18:59:08,981 - __main__ - INFO - [DEBUG] Tentando alinhamento por marcadores...
+2025-12-05 18:59:08,987 - __main__ - WARNING - [DEBUG] ⚠️  Alinhamento não aplicado (marks_not_found)
+2025-12-05 18:59:08,987 - __main__ - INFO - [DEBUG] Pré-processando imagem (grayscale, autocontrast, sharpen, threshold)...
+2025-12-05 18:59:09,059 - __main__ - INFO - [DEBUG] Imagem pré-processada: (3509, 2481) | min=0, max=1
+2025-12-05 18:59:09,059 - __main__ - INFO - [DEBUG] Detectando bolhas usando coordenadas fixas do template...
+2025-12-05 18:59:09,060 - __main__ - INFO - [DEBUG] Template ENEM90: scale_x=1.000, scale_y=1.000, radius=19px (ref=19)
+2025-12-05 18:59:09,060 - __main__ - INFO - [DEBUG Q1] Darkness: {'A': 0.999780022812449, 'B': 0.9973874314268644, 'C': 0.9972434957362447, 'D': 0.9972842322524578, 'E': 0.99727065341372} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:59:09,060 - __main__ - INFO - [DEBUG Q2] Darkness: {'A': 0.9972815164847103, 'B': 0.9974037260333497, 'C': 0.9972597903427298, 'D': 0.9973168214654283, 'E': 0.9996904024767802} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 18:59:09,060 - __main__ - INFO - [DEBUG Q3] Darkness: {'A': 0.999799033186682, 'B': 0.9973982944978546, 'C': 0.9972543588072348, 'D': 0.9972950953234478, 'E': 0.9972679376459725} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:59:09,060 - __main__ - INFO - [DEBUG Q4] Darkness: {'A': 0.9972679376459725, 'B': 0.9974227364075824, 'C': 0.9972625061104774, 'D': 0.9973059583944381, 'E': 0.999709412851013} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 18:59:09,060 - __main__ - INFO - [DEBUG Q5] Darkness: {'A': 0.9997311389929933, 'B': 0.9974010102656021, 'C': 0.9972679376459725, 'D': 0.9972950953234478, 'E': 0.9972760849492152} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 18:59:09,061 - __main__ - INFO - [DEBUG] ✅ Página 1 (OpenCV): 90/90 respostas marcadas
+2025-12-05 18:59:09,061 - __main__ - INFO - [DEBUG] ✅ Página 1 processada com sucesso
+2025-12-05 18:59:09,062 - werkzeug - INFO - 127.0.0.1 - - [05/Dec/2025 18:59:09] "POST /api/process-image HTTP/1.1" 200 -
+2025-12-05 19:00:09,184 - __main__ - INFO - [DEBUG] Recebida imagem: 3693525 bytes | filename=gabarito.png
+2025-12-05 19:00:09,325 - __main__ - INFO - [DEBUG] Imagem convertida: shape=(3509, 2481, 3) | dtype=uint8
+2025-12-05 19:00:09,325 - __main__ - INFO - [DEBUG] Processando página 1 | template=enem90_v5 | debug=False | yolo=False | chatgpt=False...
+2025-12-05 19:00:09,325 - __main__ - INFO - [DEBUG] Processando página 1: 2481x3509 pixels | template=enem90_v5 | yolo=False | debug=False
+2025-12-05 19:00:09,325 - __main__ - INFO - [DEBUG] Tentando alinhamento por marcadores...
+2025-12-05 19:00:09,331 - __main__ - WARNING - [DEBUG] ⚠️  Alinhamento não aplicado (marks_not_found)
+2025-12-05 19:00:09,331 - __main__ - INFO - [DEBUG] Pré-processando imagem (grayscale, autocontrast, sharpen, threshold)...
+2025-12-05 19:00:09,411 - __main__ - INFO - [DEBUG] Imagem pré-processada: (3509, 2481) | min=0, max=1
+2025-12-05 19:00:09,411 - __main__ - INFO - [DEBUG] Detectando bolhas usando coordenadas fixas do template...
+2025-12-05 19:00:09,412 - __main__ - INFO - [DEBUG] Template ENEM90: scale_x=1.000, scale_y=1.000, radius=19px (ref=19)
+2025-12-05 19:00:09,412 - __main__ - INFO - [DEBUG Q1] Darkness: {'A': 0.999780022812449, 'B': 0.9973874314268644, 'C': 0.9972434957362447, 'D': 0.9972842322524578, 'E': 0.99727065341372} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 19:00:09,412 - __main__ - INFO - [DEBUG Q2] Darkness: {'A': 0.9972815164847103, 'B': 0.9974037260333497, 'C': 0.9972597903427298, 'D': 0.9973168214654283, 'E': 0.9996904024767802} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 19:00:09,412 - __main__ - INFO - [DEBUG Q3] Darkness: {'A': 0.999799033186682, 'B': 0.9973982944978546, 'C': 0.9972543588072348, 'D': 0.9972950953234478, 'E': 0.9972679376459725} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 19:00:09,412 - __main__ - INFO - [DEBUG Q4] Darkness: {'A': 0.9972679376459725, 'B': 0.9974227364075824, 'C': 0.9972625061104774, 'D': 0.9973059583944381, 'E': 0.999709412851013} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 19:00:09,412 - __main__ - INFO - [DEBUG Q5] Darkness: {'A': 0.9997311389929933, 'B': 0.9974010102656021, 'C': 0.9972679376459725, 'D': 0.9972950953234478, 'E': 0.9972760849492152} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 19:00:09,413 - __main__ - INFO - [DEBUG] ✅ Página 1 (OpenCV): 90/90 respostas marcadas
+2025-12-05 19:00:09,413 - __main__ - INFO - [DEBUG] ✅ Página 1 processada com sucesso
+2025-12-05 19:00:09,414 - werkzeug - INFO - 127.0.0.1 - - [05/Dec/2025 19:00:09] "POST /api/process-image HTTP/1.1" 200 -
+2025-12-05 19:01:03,747 - __main__ - INFO - [DEBUG] Recebida imagem: 3693525 bytes | filename=test.png
+2025-12-05 19:01:03,880 - __main__ - INFO - [DEBUG] Imagem convertida: shape=(3509, 2481, 3) | dtype=uint8
+2025-12-05 19:01:03,880 - __main__ - INFO - [DEBUG] Processando página 1 | template=enem90_v5 | debug=False | yolo=False | chatgpt=False...
+2025-12-05 19:01:03,880 - __main__ - INFO - [DEBUG] Processando página 1: 2481x3509 pixels | template=enem90_v5 | yolo=False | debug=False
+2025-12-05 19:01:03,880 - __main__ - INFO - [DEBUG] Tentando alinhamento por marcadores...
+2025-12-05 19:01:03,885 - __main__ - WARNING - [DEBUG] ⚠️  Alinhamento não aplicado (marks_not_found)
+2025-12-05 19:01:03,885 - __main__ - INFO - [DEBUG] Pré-processando imagem (grayscale, autocontrast, sharpen, threshold)...
+2025-12-05 19:01:03,956 - __main__ - INFO - [DEBUG] Imagem pré-processada: (3509, 2481) | min=0, max=1
+2025-12-05 19:01:03,956 - __main__ - INFO - [DEBUG] Detectando bolhas usando coordenadas fixas do template...
+2025-12-05 19:01:03,956 - __main__ - INFO - [DEBUG] Template ENEM90: scale_x=1.000, scale_y=1.000, radius=19px (ref=19)
+2025-12-05 19:01:03,956 - __main__ - INFO - [DEBUG Q1] Darkness: {'A': 0.999780022812449, 'B': 0.9973874314268644, 'C': 0.9972434957362447, 'D': 0.9972842322524578, 'E': 0.99727065341372} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 19:01:03,956 - __main__ - INFO - [DEBUG Q2] Darkness: {'A': 0.9972815164847103, 'B': 0.9974037260333497, 'C': 0.9972597903427298, 'D': 0.9973168214654283, 'E': 0.9996904024767802} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 19:01:03,956 - __main__ - INFO - [DEBUG Q3] Darkness: {'A': 0.999799033186682, 'B': 0.9973982944978546, 'C': 0.9972543588072348, 'D': 0.9972950953234478, 'E': 0.9972679376459725} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 19:01:03,956 - __main__ - INFO - [DEBUG Q4] Darkness: {'A': 0.9972679376459725, 'B': 0.9974227364075824, 'C': 0.9972625061104774, 'D': 0.9973059583944381, 'E': 0.999709412851013} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 19:01:03,956 - __main__ - INFO - [DEBUG Q5] Darkness: {'A': 0.9997311389929933, 'B': 0.9974010102656021, 'C': 0.9972679376459725, 'D': 0.9972950953234478, 'E': 0.9972760849492152} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 19:01:03,958 - __main__ - INFO - [DEBUG] ✅ Página 1 (OpenCV): 90/90 respostas marcadas
+2025-12-05 19:01:03,958 - __main__ - INFO - [DEBUG] ✅ Página 1 processada com sucesso
+2025-12-05 19:01:03,959 - werkzeug - INFO - 127.0.0.1 - - [05/Dec/2025 19:01:03] "POST /api/process-image HTTP/1.1" 200 -
+2025-12-05 19:01:03,964 - __main__ - INFO - [DEBUG] Recebida imagem: 3693525 bytes | filename=test.png
+2025-12-05 19:01:04,095 - __main__ - INFO - [DEBUG] Imagem convertida: shape=(3509, 2481, 3) | dtype=uint8
+2025-12-05 19:01:04,095 - __main__ - INFO - [DEBUG] Processando página 1 | template=enem90_v5 | debug=False | yolo=False | chatgpt=False...
+2025-12-05 19:01:04,095 - __main__ - INFO - [DEBUG] Processando página 1: 2481x3509 pixels | template=enem90_v5 | yolo=False | debug=False
+2025-12-05 19:01:04,096 - __main__ - INFO - [DEBUG] Tentando alinhamento por marcadores...
+2025-12-05 19:01:04,100 - __main__ - WARNING - [DEBUG] ⚠️  Alinhamento não aplicado (marks_not_found)
+2025-12-05 19:01:04,100 - __main__ - INFO - [DEBUG] Pré-processando imagem (grayscale, autocontrast, sharpen, threshold)...
+2025-12-05 19:01:04,170 - __main__ - INFO - [DEBUG] Imagem pré-processada: (3509, 2481) | min=0, max=1
+2025-12-05 19:01:04,170 - __main__ - INFO - [DEBUG] Detectando bolhas usando coordenadas fixas do template...
+2025-12-05 19:01:04,171 - __main__ - INFO - [DEBUG] Template ENEM90: scale_x=1.000, scale_y=1.000, radius=19px (ref=19)
+2025-12-05 19:01:04,171 - __main__ - INFO - [DEBUG Q1] Darkness: {'A': 0.999780022812449, 'B': 0.9973874314268644, 'C': 0.9972434957362447, 'D': 0.9972842322524578, 'E': 0.99727065341372} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 19:01:04,171 - __main__ - INFO - [DEBUG Q2] Darkness: {'A': 0.9972815164847103, 'B': 0.9974037260333497, 'C': 0.9972597903427298, 'D': 0.9973168214654283, 'E': 0.9996904024767802} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 19:01:04,171 - __main__ - INFO - [DEBUG Q3] Darkness: {'A': 0.999799033186682, 'B': 0.9973982944978546, 'C': 0.9972543588072348, 'D': 0.9972950953234478, 'E': 0.9972679376459725} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 19:01:04,171 - __main__ - INFO - [DEBUG Q4] Darkness: {'A': 0.9972679376459725, 'B': 0.9974227364075824, 'C': 0.9972625061104774, 'D': 0.9973059583944381, 'E': 0.999709412851013} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 19:01:04,171 - __main__ - INFO - [DEBUG Q5] Darkness: {'A': 0.9997311389929933, 'B': 0.9974010102656021, 'C': 0.9972679376459725, 'D': 0.9972950953234478, 'E': 0.9972760849492152} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 19:01:04,172 - __main__ - INFO - [DEBUG] ✅ Página 1 (OpenCV): 90/90 respostas marcadas
+2025-12-05 19:01:04,172 - __main__ - INFO - [DEBUG] ✅ Página 1 processada com sucesso
+2025-12-05 19:01:04,173 - werkzeug - INFO - 127.0.0.1 - - [05/Dec/2025 19:01:04] "POST /api/process-image HTTP/1.1" 200 -
+2025-12-05 19:01:38,093 - __main__ - INFO - [DEBUG] Recebida imagem: 3693525 bytes | filename=test.png
+2025-12-05 19:01:38,225 - __main__ - INFO - [DEBUG] Imagem convertida: shape=(3509, 2481, 3) | dtype=uint8
+2025-12-05 19:01:38,225 - __main__ - INFO - [DEBUG] Processando página 1 | template=enem90_v5 | debug=False | yolo=False | chatgpt=False...
+2025-12-05 19:01:38,225 - __main__ - INFO - [DEBUG] Processando página 1: 2481x3509 pixels | template=enem90_v5 | yolo=False | debug=False
+2025-12-05 19:01:38,225 - __main__ - INFO - [DEBUG] Tentando alinhamento por marcadores...
+2025-12-05 19:01:38,230 - __main__ - WARNING - [DEBUG] ⚠️  Alinhamento não aplicado (marks_not_found)
+2025-12-05 19:01:38,230 - __main__ - INFO - [DEBUG] Pré-processando imagem (grayscale, autocontrast, sharpen, threshold)...
+2025-12-05 19:01:38,301 - __main__ - INFO - [DEBUG] Imagem pré-processada: (3509, 2481) | min=0, max=1
+2025-12-05 19:01:38,301 - __main__ - INFO - [DEBUG] Detectando bolhas usando coordenadas fixas do template...
+2025-12-05 19:01:38,301 - __main__ - INFO - [DEBUG] Template ENEM90: scale_x=1.000, scale_y=1.000, radius=19px (ref=19)
+2025-12-05 19:01:38,301 - __main__ - INFO - [DEBUG Q1] Darkness: {'A': 0.999780022812449, 'B': 0.9973874314268644, 'C': 0.9972434957362447, 'D': 0.9972842322524578, 'E': 0.99727065341372} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 19:01:38,301 - __main__ - INFO - [DEBUG Q2] Darkness: {'A': 0.9972815164847103, 'B': 0.9974037260333497, 'C': 0.9972597903427298, 'D': 0.9973168214654283, 'E': 0.9996904024767802} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 19:01:38,301 - __main__ - INFO - [DEBUG Q3] Darkness: {'A': 0.999799033186682, 'B': 0.9973982944978546, 'C': 0.9972543588072348, 'D': 0.9972950953234478, 'E': 0.9972679376459725} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 19:01:38,301 - __main__ - INFO - [DEBUG Q4] Darkness: {'A': 0.9972679376459725, 'B': 0.9974227364075824, 'C': 0.9972625061104774, 'D': 0.9973059583944381, 'E': 0.999709412851013} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: E
+2025-12-05 19:01:38,301 - __main__ - INFO - [DEBUG Q5] Darkness: {'A': 0.9997311389929933, 'B': 0.9974010102656021, 'C': 0.9972679376459725, 'D': 0.9972950953234478, 'E': 0.9972760849492152} | Max: 1.000 | Diff: 0.002 | Threshold: 0.400 | Marked: True | Answer: A
+2025-12-05 19:01:38,303 - __main__ - INFO - [DEBUG] ✅ Página 1 (OpenCV): 90/90 respostas marcadas
+2025-12-05 19:01:38,303 - __main__ - INFO - [DEBUG] ✅ Página 1 processada com sucesso
+2025-12-05 19:01:38,304 - werkzeug - INFO - 127.0.0.1 - - [05/Dec/2025 19:01:38] "POST /api/process-image?use_yolo=false HTTP/1.1" 200 -
+2025-12-05 19:01:38,309 - __main__ - INFO - [DEBUG] Recebida imagem: 3693525 bytes | filename=test.png
+2025-12-05 19:01:38,464 - __main__ - INFO - [DEBUG] Imagem convertida: shape=(3509, 2481, 3) | dtype=uint8
+2025-12-05 19:01:38,464 - __main__ - INFO - [DEBUG] Processando página 1 | template=enem90_v5 | debug=False | yolo=True | chatgpt=False...
+2025-12-05 19:01:38,464 - __main__ - INFO - [DEBUG] Processando página 1: 2481x3509 pixels | template=enem90_v5 | yolo=True | debug=False
+2025-12-05 19:01:38,464 - __main__ - INFO - [DEBUG] Tentando alinhamento por marcadores...
+2025-12-05 19:01:38,469 - __main__ - WARNING - [DEBUG] ⚠️  Alinhamento não aplicado (marks_not_found)
+2025-12-05 19:01:38,469 - __main__ - INFO - [DEBUG] Detectando bolhas usando YOLO (imagem original)...
+2025-12-05 19:01:38,469 - __main__ - INFO - [YOLO] Carregando modelo: /Users/xandao/Desktop/OCR XTRI GABARITO/gabaritosxtri/python_omr_service/../omr model/model.pt
+2025-12-05 19:01:38,492 - __main__ - INFO - [YOLO] ✅ Modelo carregado! Classes: {0: 'a', 1: 'answer layout', 2: 'b', 3: 'c', 4: 'd', 5: 'invalid', 6: 'not answered', 7: 'reg layout', 8: 'testID layout'}
+2025-12-05 19:01:38,493 - __main__ - INFO - [YOLO] Processando imagem 2481x3509...
+2025-12-05 19:01:38,602 - __main__ - INFO - [YOLO] ✅ 212 detecções encontradas
+2025-12-05 19:01:38,606 - __main__ - INFO - [YOLO] Agrupadas em 25 linhas (questões potenciais)
+2025-12-05 19:01:38,606 - __main__ - INFO - [YOLO] ✅ Processadas 90 questões
+2025-12-05 19:01:38,606 - __main__ - INFO - [DEBUG] ✅ Página 1 (YOLO): 25/90 respostas marcadas
+2025-12-05 19:01:38,606 - __main__ - INFO - [DEBUG] ✅ Página 1 processada com sucesso
+2025-12-05 19:01:38,607 - werkzeug - INFO - 127.0.0.1 - - [05/Dec/2025 19:01:38] "POST /api/process-image?use_yolo=true HTTP/1.1" 200 -

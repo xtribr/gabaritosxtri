@@ -1,0 +1,383 @@
+{
+  "acuracia": 42.22222222222222,
+  "acertos": 38,
+  "erros": 52,
+  "padroes": {
+    "C→E": 2,
+    "A→B": 18,
+    "A→C": 15,
+    "A→E": 6,
+    "C→D": 1,
+    "C→A": 2,
+    "A→D": 5,
+    "B→A": 1,
+    "D→A": 1,
+    "B→E": 1
+  },
+  "lista_erros": [
+    {
+      "questao": 1,
+      "real": "C",
+      "omr": "E",
+      "coluna": 1,
+      "linha": 1
+    },
+    {
+      "questao": 2,
+      "real": "A",
+      "omr": "B",
+      "coluna": 1,
+      "linha": 2
+    },
+    {
+      "questao": 5,
+      "real": "A",
+      "omr": "B",
+      "coluna": 1,
+      "linha": 5
+    },
+    {
+      "questao": 6,
+      "real": "A",
+      "omr": "B",
+      "coluna": 1,
+      "linha": 6
+    },
+    {
+      "questao": 8,
+      "real": "A",
+      "omr": "B",
+      "coluna": 1,
+      "linha": 8
+    },
+    {
+      "questao": 9,
+      "real": "A",
+      "omr": "B",
+      "coluna": 1,
+      "linha": 9
+    },
+    {
+      "questao": 11,
+      "real": "A",
+      "omr": "C",
+      "coluna": 1,
+      "linha": 11
+    },
+    {
+      "questao": 13,
+      "real": "A",
+      "omr": "E",
+      "coluna": 1,
+      "linha": 13
+    },
+    {
+      "questao": 14,
+      "real": "A",
+      "omr": "E",
+      "coluna": 1,
+      "linha": 14
+    },
+    {
+      "questao": 16,
+      "real": "A",
+      "omr": "B",
+      "coluna": 2,
+      "linha": 1
+    },
+    {
+      "questao": 17,
+      "real": "C",
+      "omr": "D",
+      "coluna": 2,
+      "linha": 2
+    },
+    {
+      "questao": 18,
+      "real": "C",
+      "omr": "E",
+      "coluna": 2,
+      "linha": 3
+    },
+    {
+      "questao": 19,
+      "real": "C",
+      "omr": "A",
+      "coluna": 2,
+      "linha": 4
+    },
+    {
+      "questao": 20,
+      "real": "A",
+      "omr": "D",
+      "coluna": 2,
+      "linha": 5
+    },
+    {
+      "questao": 21,
+      "real": "A",
+      "omr": "B",
+      "coluna": 2,
+      "linha": 6
+    },
+    {
+      "questao": 22,
+      "real": "A",
+      "omr": "D",
+      "coluna": 2,
+      "linha": 7
+    },
+    {
+      "questao": 23,
+      "real": "A",
+      "omr": "B",
+      "coluna": 2,
+      "linha": 8
+    },
+    {
+      "questao": 24,
+      "real": "A",
+      "omr": "B",
+      "coluna": 2,
+      "linha": 9
+    },
+    {
+      "questao": 27,
+      "real": "C",
+      "omr": "A",
+      "coluna": 2,
+      "linha": 12
+    },
+    {
+      "questao": 28,
+      "real": "A",
+      "omr": "B",
+      "coluna": 2,
+      "linha": 13
+    },
+    {
+      "questao": 30,
+      "real": "A",
+      "omr": "C",
+      "coluna": 2,
+      "linha": 15
+    },
+    {
+      "questao": 31,
+      "real": "A",
+      "omr": "D",
+      "coluna": 3,
+      "linha": 1
+    },
+    {
+      "questao": 32,
+      "real": "A",
+      "omr": "B",
+      "coluna": 3,
+      "linha": 2
+    },
+    {
+      "questao": 35,
+      "real": "A",
+      "omr": "B",
+      "coluna": 3,
+      "linha": 5
+    },
+    {
+      "questao": 36,
+      "real": "A",
+      "omr": "B",
+      "coluna": 3,
+      "linha": 6
+    },
+    {
+      "questao": 38,
+      "real": "A",
+      "omr": "B",
+      "coluna": 3,
+      "linha": 8
+    },
+    {
+      "questao": 39,
+      "real": "A",
+      "omr": "B",
+      "coluna": 3,
+      "linha": 9
+    },
+    {
+      "questao": 43,
+      "real": "A",
+      "omr": "B",
+      "coluna": 3,
+      "linha": 13
+    },
+    {
+      "questao": 48,
+      "real": "B",
+      "omr": "A",
+      "coluna": 4,
+      "linha": 3
+    },
+    {
+      "questao": 50,
+      "real": "A",
+      "omr": "C",
+      "coluna": 4,
+      "linha": 5
+    },
+    {
+      "questao": 51,
+      "real": "A",
+      "omr": "C",
+      "coluna": 4,
+      "linha": 6
+    },
+    {
+      "questao": 52,
+      "real": "A",
+      "omr": "C",
+      "coluna": 4,
+      "linha": 7
+    },
+    {
+      "questao": 53,
+      "real": "A",
+      "omr": "C",
+      "coluna": 4,
+      "linha": 8
+    },
+    {
+      "questao": 54,
+      "real": "A",
+      "omr": "E",
+      "coluna": 4,
+      "linha": 9
+    },
+    {
+      "questao": 60,
+      "real": "D",
+      "omr": "A",
+      "coluna": 4,
+      "linha": 15
+    },
+    {
+      "questao": 63,
+      "real": "A",
+      "omr": "E",
+      "coluna": 5,
+      "linha": 3
+    },
+    {
+      "questao": 64,
+      "real": "A",
+      "omr": "E",
+      "coluna": 5,
+      "linha": 4
+    },
+    {
+      "questao": 65,
+      "real": "A",
+      "omr": "C",
+      "coluna": 5,
+      "linha": 5
+    },
+    {
+      "questao": 66,
+      "real": "A",
+      "omr": "C",
+      "coluna": 5,
+      "linha": 6
+    },
+    {
+      "questao": 67,
+      "real": "A",
+      "omr": "C",
+      "coluna": 5,
+      "linha": 7
+    },
+    {
+      "questao": 68,
+      "real": "A",
+      "omr": "C",
+      "coluna": 5,
+      "linha": 8
+    },
+    {
+      "questao": 69,
+      "real": "A",
+      "omr": "D",
+      "coluna": 5,
+      "linha": 9
+    },
+    {
+      "questao": 70,
+      "real": "A",
+      "omr": "C",
+      "coluna": 5,
+      "linha": 10
+    },
+    {
+      "questao": 71,
+      "real": "A",
+      "omr": "C",
+      "coluna": 5,
+      "linha": 11
+    },
+    {
+      "questao": 72,
+      "real": "A",
+      "omr": "C",
+      "coluna": 5,
+      "linha": 12
+    },
+    {
+      "questao": 73,
+      "real": "A",
+      "omr": "C",
+      "coluna": 5,
+      "linha": 13
+    },
+    {
+      "questao": 76,
+      "real": "A",
+      "omr": "C",
+      "coluna": 6,
+      "linha": 1
+    },
+    {
+      "questao": 77,
+      "real": "A",
+      "omr": "D",
+      "coluna": 6,
+      "linha": 2
+    },
+    {
+      "questao": 78,
+      "real": "B",
+      "omr": "E",
+      "coluna": 6,
+      "linha": 3
+    },
+    {
+      "questao": 79,
+      "real": "A",
+      "omr": "B",
+      "coluna": 6,
+      "linha": 4
+    },
+    {
+      "questao": 80,
+      "real": "A",
+      "omr": "B",
+      "coluna": 6,
+      "linha": 5
+    },
+    {
+      "questao": 83,
+      "real": "A",
+      "omr": "E",
+      "coluna": 6,
+      "linha": 8
+    }
+  ]
+}

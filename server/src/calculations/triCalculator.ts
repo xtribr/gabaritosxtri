@@ -76,24 +76,42 @@ export class TRICalculator {
     acertos: number,
     ano: number
   ): TRIDataEntry | null {
+    // Normalizar área para maiúsculas (garantir compatibilidade)
+    const areaNormalizada = area.toUpperCase();
+    
+    // Limitar acertos ao range válido (0-45)
+    const acertosLimitados = Math.max(0, Math.min(45, acertos));
+    
     // Buscar para o ano específico
     let triEntry = triData.find(
-      entry => entry.area === area && entry.acertos === acertos && entry.ano === ano
+      entry => entry.area.toUpperCase() === areaNormalizada && entry.acertos === acertosLimitados && entry.ano === ano
     );
 
     // Se não encontrou, tentar o ano mais recente disponível
     if (!triEntry) {
-      const anosDisponiveis = [...new Set(triData.filter(e => e.area === area).map(e => e.ano))].sort((a, b) => b - a);
+      const anosDisponiveis = [...new Set(triData.filter(e => e.area.toUpperCase() === areaNormalizada).map(e => e.ano))].sort((a, b) => b - a);
       console.log(`[TRICalculator] Não encontrado para ano ${ano}, tentando anos disponíveis:`, anosDisponiveis);
 
       for (const anoAlternativo of anosDisponiveis) {
         triEntry = triData.find(
-          entry => entry.area === area && entry.acertos === acertos && entry.ano === anoAlternativo
+          entry => entry.area.toUpperCase() === areaNormalizada && entry.acertos === acertosLimitados && entry.ano === anoAlternativo
         );
         if (triEntry) {
-          console.log(`[TRICalculator] Usando dados do ano ${anoAlternativo} para área ${area}, acertos ${acertos}`);
+          console.log(`[TRICalculator] Usando dados do ano ${anoAlternativo} para área ${areaNormalizada}, acertos ${acertosLimitados}`);
           break;
         }
+      }
+    }
+    
+    // Log de debug se não encontrou
+    if (!triEntry) {
+      console.warn(`[TRICalculator] Dados não encontrados: área=${areaNormalizada}, acertos=${acertosLimitados}, ano=${ano}`);
+      // Tentar encontrar dados próximos para debug
+      const similarEntries = triData.filter(
+        e => e.area.toUpperCase() === areaNormalizada && Math.abs(e.acertos - acertosLimitados) <= 2
+      );
+      if (similarEntries.length > 0) {
+        console.log(`[TRICalculator] Entradas similares encontradas:`, similarEntries.slice(0, 3).map(e => `ano=${e.ano}, acertos=${e.acertos}`));
       }
     }
 
@@ -149,6 +167,9 @@ export class TRICalculator {
 
     const triData = await TRIDataLoader.load();
 
+    // Normalizar área para maiúsculas
+    const areaNormalizada = area.toUpperCase();
+
     // Criar mapa de estatísticas das questões (porcentagem de acerto)
     const statsMap = new Map<number, number>();
     if (questionStats && questionStats.length > 0) {
@@ -162,16 +183,20 @@ export class TRICalculator {
     const desvioPadrao = this.calcularDesvioPadrao(porcentagens);
     const usarCoerencia = desvioPadrao >= 0.03 && statsMap.size > 0;
 
-    console.log(`[TRICalculator] Processando ${students.length} alunos para área ${area}, ano ${ano}`);
+    console.log(`[TRICalculator] Processando ${students.length} alunos para área ${areaNormalizada}, ano ${ano}`);
     console.log(`[TRICalculator] Total de entradas no CSV: ${triData.length}`);
+    console.log(`[TRICalculator] Entradas disponíveis para área ${areaNormalizada}:`, 
+      triData.filter(e => e.area === areaNormalizada).length);
+    console.log(`[TRICalculator] Anos disponíveis para área ${areaNormalizada}:`, 
+      [...new Set(triData.filter(e => e.area === areaNormalizada).map(e => e.ano))].sort((a, b) => a - b));
     console.log(`[TRICalculator] Usando coerência: ${usarCoerencia}`);
 
     const results: TRICalculationResult[] = students.map(student => {
       // Calcular acertos
       const correctAnswers = this.calculateCorrectAnswers(student, answerKey);
 
-      // Buscar dados históricos
-      const triEntry = this.findTRIEntry(triData, area, correctAnswers, ano);
+      // Buscar dados históricos (usar área normalizada)
+      const triEntry = this.findTRIEntry(triData, areaNormalizada, correctAnswers, ano);
 
       if (!triEntry) {
         console.log(`[TRICalculator] Dados não encontrados para: área=${area}, acertos=${correctAnswers}, ano=${ano}, studentId=${student.id}`);
