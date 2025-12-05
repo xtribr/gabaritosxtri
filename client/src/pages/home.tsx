@@ -2833,8 +2833,6 @@ export default function Home() {
                                 <TableHead className="w-32 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">MT (TRI)</TableHead>
                               </>
                             )}
-                            <TableHead className="w-24 text-center font-semibold text-xs uppercase tracking-wide bg-green-50 dark:bg-green-950">TCT</TableHead>
-                            <TableHead className="w-24 text-center font-semibold text-xs uppercase tracking-wide bg-purple-50 dark:bg-purple-950">TRI</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -2965,27 +2963,11 @@ export default function Home() {
                                     </TableCell>
                                   </>
                                 )}
-                                <TableCell className="text-center bg-green-50/50 dark:bg-green-950/50">
-                                  <span className={`font-semibold ${
-                                    notaTCT >= 6.0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
-                                  }`}>
-                                    {notaTCT.toFixed(1)}
-                                  </span>
-                                </TableCell>
-                                <TableCell className="text-center bg-purple-50/50 dark:bg-purple-950/50">
-                                  {triScore !== null && triScore !== undefined ? (
-                                    <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                      {triScore.toFixed(1)}
-                                    </span>
-                                  ) : (
-                                    <span className="text-muted-foreground text-sm">-</span>
-                                  )}
-                                </TableCell>
                               </TableRow>
                             );
                           }) || (
                             <TableRow>
-                              <TableCell colSpan={selectedTemplate.name.includes("ENEM") ? 15 : 7} className="text-center py-8 text-muted-foreground">
+                              <TableCell colSpan={selectedTemplate.name.includes("ENEM") ? 13 : 7} className="text-center py-8 text-muted-foreground">
                                 Nenhum dado disponível. Processe um PDF e configure o gabarito primeiro.
                               </TableCell>
                             </TableRow>
