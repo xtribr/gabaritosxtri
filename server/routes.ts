@@ -8,6 +8,7 @@ import * as XLSX from "xlsx";
 import Tesseract from "tesseract.js";
 import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
+import archiver from "archiver";
 import type { StudentData, ExamStatistics } from "@shared/schema";
 import { officialGabaritoTemplate } from "@shared/schema";
 import { processOMRPage, extractTextRegion, preprocessForOCR } from "./omr";
@@ -30,11 +31,11 @@ const jobs = new Map<string, ProcessingJob>();
 // Cleanup old jobs after 1 hour
 setInterval(() => {
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-  for (const [id, job] of jobs.entries()) {
+  Array.from(jobs.entries()).forEach(([id, job]) => {
     if (job.createdAt < oneHourAgo) {
       jobs.delete(id);
     }
-  }
+  });
 }, 60 * 1000);
 
 const upload = multer({
@@ -489,9 +490,10 @@ export async function registerRoutes(
 
   app.post("/api/export-excel", async (req: Request, res: Response) => {
     try {
-      const { students, answerKey, statistics } = req.body as {
+      const { students, answerKey, questionContents, statistics } = req.body as {
         students: StudentData[];
         answerKey?: string[];
+        questionContents?: Array<{ questionNumber: number; answer: string; content: string }>;
         statistics?: ExamStatistics;
       };
 
@@ -566,12 +568,19 @@ export async function registerRoutes(
       XLSX.utils.book_append_sheet(workbook, worksheet, "Alunos");
 
       if (hasGrading && answerKey) {
-        const keyData = answerKey.map((answer, index) => ({
-          "Questão": index + 1,
-          "Resposta Correta": answer,
-        }));
+        const keyData = questionContents && questionContents.length > 0
+          ? questionContents.map((qc) => ({
+              "Questão": qc.questionNumber || 0,
+              "Resposta Correta": qc.answer,
+              "Conteúdo": qc.content || "",
+            }))
+          : answerKey.map((answer, index) => ({
+              "Questão": index + 1,
+              "Resposta Correta": answer,
+              "Conteúdo": "",
+            }));
         const keySheet = XLSX.utils.json_to_sheet(keyData);
-        keySheet["!cols"] = [{ wch: 10 }, { wch: 18 }];
+        keySheet["!cols"] = [{ wch: 10 }, { wch: 18 }, { wch: 30 }];
         XLSX.utils.book_append_sheet(workbook, keySheet, "Gabarito");
       }
 
@@ -629,12 +638,12 @@ export async function registerRoutes(
   // Cleanup old generated PDFs (older than 30 minutes)
   setInterval(() => {
     const now = Date.now();
-    for (const [id, entry] of generatedPdfs.entries()) {
+    Array.from(generatedPdfs.entries()).forEach(([id, entry]) => {
       if (now - entry.createdAt > 30 * 60 * 1000) {
         generatedPdfs.delete(id);
         console.log(`[GENERATE-PDF] Cleaned up old PDF batch: ${id}`);
       }
-    }
+    });
   }, 5 * 60 * 1000);
 
   // Generate personalized PDFs from CSV
@@ -886,6 +895,130 @@ export async function registerRoutes(
         error: "Erro ao processar CSV",
         details: error instanceof Error ? error.message : "Erro desconhecido",
       });
+    }
+  });
+
+  // Download project as ZIP
+  app.get("/api/download-project-zip", async (req: Request, res: Response) => {
+    try {
+      console.log("[DOWNLOAD-ZIP] Iniciando criação do ZIP do projeto...");
+      
+      const projectRoot = process.cwd();
+      const zipFileName = `gabaritosxtri_${new Date().toISOString().split("T")[0]}.zip`;
+      
+      // Set headers for file download
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${zipFileName}"`
+      );
+      
+      // Create archiver
+      const archive = archiver("zip", {
+        zlib: { level: 9 }, // Maximum compression
+      });
+      
+      // Pipe archive data to response
+      archive.pipe(res);
+      
+      // Files and directories to include
+      const includePaths = [
+        "client",
+        "server",
+        "shared",
+        "script",
+        "attached_assets",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.json",
+        "vite.config.ts",
+        "tailwind.config.ts",
+        "drizzle.config.ts",
+        "postcss.config.js",
+        "components.json",
+        "README.md",
+        "design_guidelines.md",
+        "replit.md",
+        ".gitignore",
+      ];
+      
+      // Files and directories to exclude
+      const excludePatterns = [
+        "node_modules",
+        ".git",
+        "dist",
+        ".DS_Store",
+        "*.log",
+        ".local",
+        "*.zip",
+      ];
+      
+      // Helper function to check if path should be excluded
+      const shouldExclude = (filePath: string): boolean => {
+        return excludePatterns.some((pattern) => {
+          if (pattern.includes("*")) {
+            const regex = new RegExp(pattern.replace("*", ".*"));
+            return regex.test(filePath);
+          }
+          return filePath.includes(pattern);
+        });
+      };
+      
+      // Helper function to add directory recursively
+      const addDirectory = async (dirPath: string, zipPath: string) => {
+        try {
+          const entries = await fs.readdir(dirPath, { withFileTypes: true });
+          
+          for (const entry of entries) {
+            const fullPath = path.join(dirPath, entry.name);
+            const relativePath = path.relative(projectRoot, fullPath);
+            const zipEntryPath = path.join(zipPath, entry.name);
+            
+            // Skip excluded paths
+            if (shouldExclude(relativePath)) {
+              continue;
+            }
+            
+            if (entry.isDirectory()) {
+              await addDirectory(fullPath, zipEntryPath);
+            } else if (entry.isFile()) {
+              archive.file(fullPath, { name: zipEntryPath });
+            }
+          }
+        } catch (error) {
+          console.warn(`[DOWNLOAD-ZIP] Erro ao adicionar diretório ${dirPath}:`, error);
+        }
+      };
+      
+      // Add files and directories
+      for (const includePath of includePaths) {
+        const fullPath = path.join(projectRoot, includePath);
+        
+        try {
+          const stat = await fs.stat(fullPath);
+          
+          if (stat.isDirectory()) {
+            await addDirectory(fullPath, includePath);
+          } else if (stat.isFile()) {
+            archive.file(fullPath, { name: includePath });
+          }
+        } catch (error) {
+          console.warn(`[DOWNLOAD-ZIP] Arquivo/diretório não encontrado: ${includePath}`);
+        }
+      }
+      
+      // Finalize the archive
+      await archive.finalize();
+      
+      console.log(`[DOWNLOAD-ZIP] ZIP criado com sucesso: ${zipFileName}`);
+    } catch (error) {
+      console.error("[DOWNLOAD-ZIP] Erro ao criar ZIP:", error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Erro ao criar arquivo ZIP",
+          details: error instanceof Error ? error.message : "Erro desconhecido",
+        });
+      }
     }
   });
 

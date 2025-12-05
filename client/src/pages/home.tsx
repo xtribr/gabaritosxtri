@@ -1,6 +1,7 @@
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
-import { Upload, FileText, Download, Trash2, RefreshCw, CheckCircle, AlertCircle, Loader2, X, FileSpreadsheet, ClipboardList, Calculator, BarChart3, Plus, Minus, Info, HelpCircle, Users, FileUp, Eye } from "lucide-react";
+import { Upload, FileText, Download, Trash2, RefreshCw, CheckCircle, AlertCircle, Loader2, X, FileSpreadsheet, ClipboardList, Calculator, BarChart3, Plus, Minus, Info, HelpCircle, Users, FileUp, Eye, Moon, Sun } from "lucide-react";
+import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -41,6 +42,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
+import { useTheme } from "next-themes";
 import type { StudentData, ExamStatistics } from "@shared/schema";
 import { predefinedTemplates } from "@shared/schema";
 
@@ -64,6 +66,13 @@ interface QueuedFile {
 
 export default function Home() {
   const { toast } = useToast();
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  
   const [fileQueue, setFileQueue] = useState<QueuedFile[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [pageCount, setPageCount] = useState<number>(0);
@@ -76,8 +85,8 @@ export default function Home() {
   const [isBatchMode, setIsBatchMode] = useState<boolean>(false);
   
   const [answerKey, setAnswerKey] = useState<string[]>([]);
+  const [questionContents, setQuestionContents] = useState<Array<{ questionNumber: number; answer: string; content: string }>>([]);
   const [answerKeyDialogOpen, setAnswerKeyDialogOpen] = useState(false);
-  const [tempAnswerKey, setTempAnswerKey] = useState<string>("");
   const [numQuestions, setNumQuestions] = useState<number>(45);
   const [activeTab, setActiveTab] = useState<string>("students");
   
@@ -107,6 +116,14 @@ export default function Home() {
     const deduplicated = Array.from(new Set(parsed));
     return deduplicated.length > 0 ? deduplicated : ["A", "B", "C", "D", "E"];
   }, [selectedTemplate, customValidAnswers]);
+
+  // Extrair turma do aluno (usa campo turma ou extrai do nome)
+  const extractTurmaFromStudent = (student: StudentData): string => {
+    if (student.turma && student.turma.trim()) return student.turma.trim();
+    // Tentar extrair turma do nome (ex: "João Silva - 3º A")
+    const turmaMatch = student.studentName.match(/-?\s*([0-9]+[ºª]?\s*[A-Z])/i);
+    return turmaMatch ? turmaMatch[1].trim() : "Sem Turma";
+  };
 
   const studentsWithScores = useMemo(() => {
     if (answerKey.length === 0) return students;
@@ -161,6 +178,8 @@ export default function Home() {
         }
       });
       
+      const content = questionContents[qIndex]?.content || "";
+      
       return {
         questionNumber: qIndex + 1,
         correctCount,
@@ -168,8 +187,87 @@ export default function Home() {
         correctPercentage: studentsWithScores.length > 0 
           ? Math.round((correctCount / studentsWithScores.length) * 100) 
           : 0,
+        content: content,
       };
     });
+    
+    // Estatísticas por conteúdo (erros por conteúdo)
+    const contentStatsMap = new Map<string, { totalQuestions: number; totalErrors: number; totalAttempts: number }>();
+    
+    questionContents.forEach((content, qIndex) => {
+      if (content.content.trim() && qIndex < answerKey.length) {
+        const contentKey = content.content.trim();
+        if (!contentStatsMap.has(contentKey)) {
+          contentStatsMap.set(contentKey, { totalQuestions: 0, totalErrors: 0, totalAttempts: 0 });
+        }
+        
+        const stats = contentStatsMap.get(contentKey)!;
+        stats.totalQuestions++;
+        
+        studentsWithScores.forEach(student => {
+          if (student.answers[qIndex]) {
+            stats.totalAttempts++;
+            if (student.answers[qIndex].toUpperCase() !== answerKey[qIndex].toUpperCase()) {
+              stats.totalErrors++;
+            }
+          }
+        });
+      }
+    });
+    
+    const contentStats = Array.from(contentStatsMap.entries()).map(([content, stats]) => ({
+      content,
+      totalQuestions: stats.totalQuestions,
+      totalErrors: stats.totalErrors,
+      totalAttempts: stats.totalAttempts,
+      errorPercentage: stats.totalAttempts > 0 
+        ? Math.round((stats.totalErrors / stats.totalAttempts) * 100 * 10) / 10 
+        : 0,
+    })).sort((a, b) => b.errorPercentage - a.errorPercentage);
+    
+    // Estatísticas por aluno (individual)
+    const studentStats = studentsWithScores.map(student => ({
+      matricula: student.studentNumber,
+      nome: student.studentName,
+      turma: extractTurmaFromStudent(student),
+      acertos: student.correctAnswers || 0,
+      erros: student.wrongAnswers || 0,
+      nota: student.score || 0,
+    }));
+    
+    // Estatísticas por turma (agrupado)
+    const turmaStatsMap = new Map<string, { alunos: typeof studentStats; totalAcertos: number; totalErros: number }>();
+    
+    studentStats.forEach(student => {
+      const turma = student.turma || "Sem Turma";
+      if (!turmaStatsMap.has(turma)) {
+        turmaStatsMap.set(turma, { alunos: [], totalAcertos: 0, totalErros: 0 });
+      }
+      
+      const turmaData = turmaStatsMap.get(turma)!;
+      turmaData.alunos.push(student);
+      turmaData.totalAcertos += student.acertos;
+      turmaData.totalErros += student.erros;
+    });
+    
+    const turmaStats = Array.from(turmaStatsMap.entries()).map(([turma, data]) => {
+      const totalAlunos = data.alunos.length;
+      const mediaNota = data.alunos.length > 0
+        ? data.alunos.reduce((sum, s) => sum + s.nota, 0) / data.alunos.length
+        : 0;
+      const taxaAprovacao = data.alunos.length > 0
+        ? (data.alunos.filter(s => s.nota >= passingScore).length / data.alunos.length) * 100
+        : 0;
+      
+      return {
+        turma,
+        totalAlunos,
+        mediaNota: Math.round(mediaNota * 10) / 10,
+        taxaAprovacao: Math.round(taxaAprovacao * 10) / 10,
+        totalAcertos: data.totalAcertos,
+        totalErros: data.totalErros,
+      };
+    }).sort((a, b) => b.mediaNota - a.mediaNota);
     
     return {
       totalStudents: studentsWithScores.length,
@@ -178,8 +276,11 @@ export default function Home() {
       lowestScore,
       passingRate: Math.round(passingRate * 10) / 10,
       questionStats,
+      contentStats: contentStats.length > 0 ? contentStats : undefined,
+      studentStats: studentStats.length > 0 ? studentStats : undefined,
+      turmaStats: turmaStats.length > 0 ? turmaStats : undefined,
     };
-  }, [studentsWithScores, answerKey, passingScore]);
+  }, [studentsWithScores, answerKey, passingScore, questionContents]);
 
   const scoreDistribution = useMemo(() => {
     if (studentsWithScores.length === 0 || answerKey.length === 0) return [];
@@ -483,6 +584,7 @@ export default function Home() {
         body: JSON.stringify({ 
           students: studentsWithScores,
           answerKey: answerKey.length > 0 ? answerKey : undefined,
+          questionContents: questionContents.length > 0 ? questionContents : undefined,
           statistics: statistics || undefined,
         }),
       });
@@ -527,6 +629,7 @@ export default function Home() {
     setStudents([]);
     setErrorMessage("");
     setAnswerKey([]);
+    setQuestionContents([]);
     setActiveTab("students");
   };
 
@@ -668,46 +771,193 @@ export default function Home() {
   };
 
   const handleApplyAnswerKey = () => {
-    const answers = tempAnswerKey
-      .toUpperCase()
-      .split(/[\s,;]+/)
+    // Extrair respostas dos conteúdos cadastrados
+    const answersFromContents = questionContents
+      .slice(0, numQuestions)
+      .map(c => c.answer)
       .filter(a => validAnswers.includes(a));
     
-    if (answers.length === 0) {
+    if (answersFromContents.length === 0) {
       toast({
         title: "Gabarito inválido",
-        description: `Insira as respostas separadas por espaço ou vírgula. Respostas válidas: ${validAnswers.join(", ")}`,
+        description: `Cadastre pelo menos uma resposta válida (${validAnswers.join(", ")}) nas questões acima.`,
         variant: "destructive",
       });
       return;
     }
     
-    let finalAnswers = answers;
-    if (answers.length > numQuestions) {
-      finalAnswers = answers.slice(0, numQuestions);
+    // Garantir que temos respostas para todas as questões
+    const finalAnswers: string[] = [];
+    const finalContents: Array<{ questionNumber: number; answer: string; content: string }> = [];
+    
+    for (let i = 0; i < numQuestions; i++) {
+      const content = questionContents[i] || { questionNumber: i + 1, answer: "", content: "" };
+      const questionNum = content.questionNumber || (i + 1);
+      if (validAnswers.includes(content.answer)) {
+        finalAnswers[i] = content.answer;
+        finalContents[i] = { questionNumber: questionNum, answer: content.answer, content: content.content || "" };
+      } else {
+        // Se não tem resposta válida, deixa vazio
+        finalAnswers[i] = "";
+        finalContents[i] = { questionNumber: questionNum, answer: "", content: content.content || "" };
+      }
+    }
+    
+    const validAnswersCount = finalAnswers.filter(a => a).length;
+    
+    if (validAnswersCount === 0) {
       toast({
-        title: "Gabarito ajustado",
-        description: `Foram inseridas ${answers.length} respostas, mas apenas ${numQuestions} questões configuradas. Usando as primeiras ${numQuestions}.`,
+        title: "Gabarito inválido",
+        description: `Nenhuma resposta válida encontrada. Selecione letras válidas (${validAnswers.join(", ")}) nas questões.`,
+        variant: "destructive",
       });
-    } else if (answers.length < numQuestions) {
-      toast({
-        title: "Aviso",
-        description: `Foram inseridas ${answers.length} respostas para ${numQuestions} questões configuradas. As questões restantes serão ignoradas no cálculo.`,
-      });
+      return;
     }
     
     setAnswerKey(finalAnswers);
+    setQuestionContents(finalContents);
     setAnswerKeyDialogOpen(false);
+    
+    const contentsCount = finalContents.filter(c => c.content.trim()).length;
     toast({
       title: "Gabarito aplicado",
-      description: `${finalAnswers.length} respostas configuradas.`,
+      description: `${validAnswersCount} respostas configuradas${contentsCount > 0 ? `, ${contentsCount} com conteúdo cadastrado` : ""}.`,
     });
   };
 
   const handleGenerateEmptyAnswerKey = () => {
+    // Inicializar conteúdos vazios com primeira opção como resposta padrão
     const firstOption = validAnswers.length > 0 ? validAnswers[0] : "A";
-    const emptyKey = Array(numQuestions).fill(firstOption);
-    setTempAnswerKey(emptyKey.join(" "));
+    const emptyContents = Array.from({ length: numQuestions }).map((_, i) => ({
+      questionNumber: i + 1,
+      answer: firstOption,
+      content: "",
+    }));
+    setQuestionContents(emptyContents);
+    toast({
+      title: "Modelo gerado",
+      description: `${numQuestions} questões inicializadas. Preencha os números, respostas e conteúdos.`,
+    });
+  };
+
+  const handleImportAnswerKey = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Reset input
+    if (event.target) {
+      event.target.value = "";
+    }
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: "array" });
+      
+      // Pegar a primeira planilha
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" }) as any[][];
+
+      if (data.length < 2) {
+        throw new Error("O arquivo deve ter pelo menos um cabeçalho e uma linha de dados");
+      }
+
+      // Encontrar o cabeçalho (pode estar em qualquer linha)
+      let headerRowIndex = -1;
+      let questionNumberCol = -1;
+      let answerCol = -1;
+      let contentCol = -1;
+
+      for (let i = 0; i < Math.min(5, data.length); i++) {
+        const row = data[i];
+        if (!Array.isArray(row)) continue;
+
+        // Procurar pelos nomes das colunas (case insensitive, com variações)
+        for (let j = 0; j < row.length; j++) {
+          const cellValue = String(row[j] || "").trim().toUpperCase();
+          
+          if (cellValue.includes("QUESTÃO") || cellValue.includes("QUESTAO") || cellValue.includes("NR") || cellValue.includes("NÚMERO") || cellValue === "Q" || cellValue === "N") {
+            questionNumberCol = j;
+          }
+          if (cellValue.includes("GABARITO") || cellValue.includes("RESPOSTA") || cellValue === "LETRA" || cellValue === "A") {
+            answerCol = j;
+          }
+          if (cellValue.includes("CONTEÚDO") || cellValue.includes("CONTEUDO") || cellValue.includes("CONTENT") || cellValue === "C") {
+            contentCol = j;
+          }
+        }
+
+        if (questionNumberCol >= 0 && answerCol >= 0 && contentCol >= 0) {
+          headerRowIndex = i;
+          break;
+        }
+      }
+
+      if (questionNumberCol < 0 || answerCol < 0 || contentCol < 0) {
+        throw new Error("Não foi possível encontrar as colunas: NR QUESTÃO, GABARITO e CONTEÚDO. Verifique o formato do arquivo.");
+      }
+
+      // Processar dados
+      const importedContents: Array<{ questionNumber: number; answer: string; content: string }> = [];
+      
+      for (let i = headerRowIndex + 1; i < data.length; i++) {
+        const row = data[i];
+        if (!Array.isArray(row)) continue;
+
+        const questionNum = parseInt(String(row[questionNumberCol] || "").trim());
+        const answer = String(row[answerCol] || "").trim().toUpperCase();
+        const content = String(row[contentCol] || "").trim();
+
+        // Pular linhas vazias
+        if (!questionNum && !answer && !content) continue;
+
+        if (questionNum && questionNum > 0) {
+          importedContents.push({
+            questionNumber: questionNum,
+            answer: answer || "",
+            content: content || "",
+          });
+        }
+      }
+
+      if (importedContents.length === 0) {
+        throw new Error("Nenhum dado válido encontrado no arquivo");
+      }
+
+      // Ordenar por número da questão
+      importedContents.sort((a, b) => a.questionNumber - b.questionNumber);
+
+      // Atualizar o número de questões se necessário
+      const maxQuestionNum = Math.max(...importedContents.map(c => c.questionNumber));
+      if (maxQuestionNum > numQuestions) {
+        setNumQuestions(maxQuestionNum);
+      }
+
+      // Preencher questionContents
+      const newContents: Array<{ questionNumber: number; answer: string; content: string }> = [];
+      for (let i = 0; i < Math.max(numQuestions, maxQuestionNum); i++) {
+        const imported = importedContents.find(c => c.questionNumber === i + 1);
+        if (imported) {
+          newContents[i] = imported;
+        } else {
+          newContents[i] = { questionNumber: i + 1, answer: "", content: "" };
+        }
+      }
+
+      setQuestionContents(newContents);
+
+      toast({
+        title: "Gabarito importado",
+        description: `${importedContents.length} questões importadas com sucesso. Você pode editar os dados abaixo.`,
+      });
+    } catch (error) {
+      console.error("Error importing answer key:", error);
+      toast({
+        title: "Erro ao importar gabarito",
+        description: error instanceof Error ? error.message : "Verifique o formato do arquivo Excel/CSV.",
+        variant: "destructive",
+      });
+    }
   };
 
   const updateStudentField = (index: number, field: keyof StudentData, value: string) => {
@@ -895,6 +1145,28 @@ export default function Home() {
             </h1>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            {mounted && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                    className="h-9 w-9"
+                    data-testid="button-theme-toggle"
+                  >
+                    {theme === "dark" ? (
+                      <Sun className="h-4 w-4" />
+                    ) : (
+                      <Moon className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {theme === "dark" ? "Modo claro" : "Modo escuro"}
+                </TooltipContent>
+              </Tooltip>
+            )}
             {students.length > 0 && (
               <Badge variant="secondary" className="text-sm" data-testid="badge-student-count">
                 {students.length} aluno{students.length !== 1 ? "s" : ""}
@@ -931,8 +1203,20 @@ export default function Home() {
                               const idx = parseInt(value);
                               setSelectedTemplateIndex(idx);
                               const template = predefinedTemplates[idx];
-                              setNumQuestions(template.totalQuestions);
+                              const newNumQuestions = template.totalQuestions;
+                              setNumQuestions(newNumQuestions);
                               setPassingScore(template.passingScore);
+                              
+                              // Ajustar conteúdos para o novo número de questões
+                              if (questionContents.length !== newNumQuestions) {
+                                const adjustedContents = Array.from({ length: newNumQuestions }).map((_, i) => {
+                                  const existing = questionContents[i];
+                                  return existing 
+                                    ? { ...existing, questionNumber: existing.questionNumber || (i + 1) }
+                                    : { questionNumber: i + 1, answer: "", content: "" };
+                                });
+                                setQuestionContents(adjustedContents);
+                              }
                             }}
                           >
                             <SelectTrigger data-testid="select-template">
@@ -983,7 +1267,21 @@ export default function Home() {
                             <Input
                               type="number"
                               value={numQuestions}
-                              onChange={(e) => setNumQuestions(parseInt(e.target.value) || 45)}
+                              onChange={(e) => {
+                                const newNum = parseInt(e.target.value) || 45;
+                                setNumQuestions(newNum);
+                                
+                                // Ajustar conteúdos para o novo número de questões
+                                if (questionContents.length !== newNum) {
+                                  const adjustedContents = Array.from({ length: newNum }).map((_, i) => {
+                                    const existing = questionContents[i];
+                                    return existing 
+                                      ? { ...existing, questionNumber: existing.questionNumber || (i + 1) }
+                                      : { questionNumber: i + 1, answer: "", content: "" };
+                                  });
+                                  setQuestionContents(adjustedContents);
+                                }
+                              }}
                               className="w-16 h-8 text-center mx-1"
                               data-testid="input-num-questions"
                             />
@@ -1030,20 +1328,105 @@ export default function Home() {
                           </Badge>
                         ))}
                       </div>
-                      <div>
-                        <Label htmlFor="answer-key-input">
-                          Respostas (separadas por espaço ou vírgula)
-                        </Label>
-                        <textarea
-                          id="answer-key-input"
-                          value={tempAnswerKey}
-                          onChange={(e) => setTempAnswerKey(e.target.value.toUpperCase())}
-                          placeholder="Ex: A B C D E A B C D E..."
-                          className="w-full h-32 mt-2 p-3 border rounded-md font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-                          data-testid="input-answer-key"
-                        />
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {tempAnswerKey.split(/[\s,;]+/).filter(a => validAnswers.includes(a.toUpperCase())).length} respostas válidas detectadas
+                      <div className="border-t pt-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <Label className="text-base font-semibold block">
+                            Gabarito Oficial - Respostas e Conteúdos
+                          </Label>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="file"
+                              accept=".xlsx,.xls,.csv"
+                              onChange={handleImportAnswerKey}
+                              className="hidden"
+                              id="import-answer-key"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => document.getElementById("import-answer-key")?.click()}
+                              className="text-xs"
+                            >
+                              <FileSpreadsheet className="h-3 w-3 mr-1" />
+                              Importar Excel/CSV
+                            </Button>
+                          </div>
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          Importe um arquivo Excel/CSV com as colunas: <strong>NR QUESTÃO</strong>, <strong>GABARITO</strong> e <strong>CONTEÚDO</strong>. 
+                          Ou cadastre manualmente a letra da resposta correta e o conteúdo de cada questão. Exemplo: Letra "B" - Conteúdo "mat - geometria"
+                        </p>
+                        <div className="max-h-96 overflow-y-auto space-y-2 border rounded-md p-3">
+                          {Array.from({ length: numQuestions }).map((_, index) => {
+                            const currentContent = questionContents[index] || { questionNumber: index + 1, answer: "", content: "" };
+                            return (
+                              <div key={index} className="flex items-center gap-2 p-2 bg-muted/30 rounded-md">
+                                <Label className="text-xs font-mono text-muted-foreground w-8 shrink-0">
+                                  Q:
+                                </Label>
+                                <Input
+                                  type="number"
+                                  value={currentContent.questionNumber || index + 1}
+                                  onChange={(e) => {
+                                    const newContents = [...questionContents];
+                                    const questionNum = parseInt(e.target.value) || (index + 1);
+                                    if (!newContents[index]) {
+                                      newContents[index] = { questionNumber: questionNum, answer: "", content: "" };
+                                    } else {
+                                      newContents[index] = { ...newContents[index], questionNumber: questionNum };
+                                    }
+                                    setQuestionContents(newContents);
+                                  }}
+                                  className="w-16 h-8 text-center text-sm font-mono"
+                                  min={1}
+                                  data-testid={`input-question-number-${index}`}
+                                />
+                                <Select
+                                  value={currentContent.answer}
+                                  onValueChange={(value) => {
+                                    const newContents = [...questionContents];
+                                    if (!newContents[index]) {
+                                      newContents[index] = { questionNumber: index + 1, answer: "", content: "" };
+                                    }
+                                    newContents[index] = { ...newContents[index], answer: value };
+                                    setQuestionContents(newContents);
+                                  }}
+                                >
+                                  <SelectTrigger className="w-20 h-8">
+                                    <SelectValue placeholder="Letra" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {validAnswers.map((ans) => (
+                                      <SelectItem key={ans} value={ans}>
+                                        {ans}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Input
+                                  value={currentContent.content}
+                                  onChange={(e) => {
+                                    const newContents = [...questionContents];
+                                    if (!newContents[index]) {
+                                      newContents[index] = { questionNumber: index + 1, answer: "", content: "" };
+                                    }
+                                    newContents[index] = { ...newContents[index], content: e.target.value };
+                                    setQuestionContents(newContents);
+                                  }}
+                                  placeholder={`Ex: mat - geometria`}
+                                  className="flex-1 h-8 text-sm"
+                                  data-testid={`input-question-content-${index}`}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {questionContents.filter(c => c.answer && validAnswers.includes(c.answer)).length} questões com resposta cadastrada
+                          {questionContents.filter(c => c.content.trim()).length > 0 && 
+                            ` • ${questionContents.filter(c => c.content.trim()).length} com conteúdo cadastrado`
+                          }
                         </p>
                       </div>
                     </div>
@@ -1677,6 +2060,7 @@ export default function Home() {
                           <TableHead className="w-16 text-center font-semibold text-xs uppercase tracking-wide">#</TableHead>
                           <TableHead className="min-w-[120px] font-semibold text-xs uppercase tracking-wide">Matrícula</TableHead>
                           <TableHead className="min-w-[180px] font-semibold text-xs uppercase tracking-wide">Nome</TableHead>
+                          <TableHead className="min-w-[100px] font-semibold text-xs uppercase tracking-wide">Turma</TableHead>
                           <TableHead className="min-w-[350px] font-semibold text-xs uppercase tracking-wide">Respostas</TableHead>
                           {answerKey.length > 0 && (
                             <>
@@ -1719,6 +2103,15 @@ export default function Home() {
                                 onChange={(e) => updateStudentField(index, "studentName", e.target.value)}
                                 className="h-8 text-sm"
                                 data-testid={`input-student-name-${index}`}
+                              />
+                            </TableCell>
+                            <TableCell className="h-12">
+                              <Input
+                                value={student.turma || ""}
+                                onChange={(e) => updateStudentField(index, "turma", e.target.value)}
+                                className="h-8 text-sm"
+                                placeholder="Ex: 3º A"
+                                data-testid={`input-student-turma-${index}`}
                               />
                             </TableCell>
                             <TableCell className="h-12">
@@ -1794,23 +2187,43 @@ export default function Home() {
                     <CardHeader>
                       <CardTitle className="text-base">Gabarito Oficial</CardTitle>
                       <CardDescription>
-                        Clique em uma resposta para editá-la
+                        Clique em uma resposta para editá-la. Os conteúdos são exibidos abaixo de cada questão.
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-5 sm:grid-cols-9 md:grid-cols-15 gap-2">
-                        {answerKey.map((answer, index) => (
-                          <div key={index} className="flex flex-col items-center gap-1">
-                            <span className="text-xs text-muted-foreground">{index + 1}</span>
-                            <Input
-                              value={answer}
-                              onChange={(e) => updateAnswerKeyValue(index, e.target.value)}
-                              className="h-8 w-10 text-center font-mono text-sm p-0"
-                              maxLength={1}
-                              data-testid={`input-key-${index}`}
-                            />
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-5 sm:grid-cols-9 md:grid-cols-15 gap-2">
+                          {answerKey.map((answer, index) => (
+                            <div key={index} className="flex flex-col items-center gap-1">
+                              <span className="text-xs text-muted-foreground">{index + 1}</span>
+                              <Input
+                                value={answer}
+                                onChange={(e) => updateAnswerKeyValue(index, e.target.value)}
+                                className="h-8 w-10 text-center font-mono text-sm p-0"
+                                maxLength={1}
+                                data-testid={`input-key-${index}`}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        
+                        {questionContents.length > 0 && questionContents.some(c => c.content.trim()) && (
+                          <div className="border-t pt-4 mt-4">
+                            <CardTitle className="text-sm mb-3">Conteúdos das Questões</CardTitle>
+                            <div className="grid gap-2 max-h-96 overflow-y-auto">
+                              {questionContents.map((content, index) => {
+                                if (!content.content.trim()) return null;
+                                return (
+                                  <div key={index} className="flex items-center gap-3 p-2 bg-muted/30 rounded-md text-sm">
+                                    <span className="font-mono text-muted-foreground w-12">Q{content.questionNumber || index + 1}:</span>
+                                    <Badge variant="outline" className="w-8 text-center">{content.answer}</Badge>
+                                    <span className="flex-1">{content.content}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
-                        ))}
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -1955,26 +2368,183 @@ export default function Home() {
                       <CardContent>
                         <div className="grid grid-cols-5 sm:grid-cols-9 md:grid-cols-15 gap-2">
                           {statistics.questionStats.map((stat) => (
-                            <div 
-                              key={stat.questionNumber} 
-                              className="flex flex-col items-center gap-1"
-                              data-testid={`stat-question-${stat.questionNumber}`}
-                            >
-                              <span className="text-xs text-muted-foreground">Q{stat.questionNumber}</span>
-                              <div 
-                                className={`h-8 w-10 rounded flex items-center justify-center text-xs font-medium ${
-                                  stat.correctPercentage >= 70 ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" :
-                                  stat.correctPercentage >= 40 ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" :
-                                  "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
-                                }`}
-                              >
-                                {stat.correctPercentage}%
-                              </div>
-                            </div>
+                            <Tooltip key={stat.questionNumber}>
+                              <TooltipTrigger asChild>
+                                <div 
+                                  className="flex flex-col items-center gap-1 cursor-help min-w-[60px]"
+                                  data-testid={`stat-question-${stat.questionNumber}`}
+                                >
+                                  <span className="text-xs font-medium text-muted-foreground">Q{stat.questionNumber}</span>
+                                  <div 
+                                    className={`h-8 w-10 rounded flex items-center justify-center text-xs font-medium ${
+                                      stat.correctPercentage >= 71 ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" :
+                                      stat.correctPercentage >= 50 ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" :
+                                      "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300"
+                                    }`}
+                                  >
+                                    {stat.correctPercentage}%
+                                  </div>
+                                  {stat.content && (
+                                    <span className="text-[8px] text-muted-foreground text-center leading-tight max-w-[60px] px-1 line-clamp-2" title={stat.content}>
+                                      {stat.content}
+                                    </span>
+                                  )}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                <p className="font-medium">Q{stat.questionNumber}</p>
+                                {stat.content && (
+                                  <p className="text-sm mt-1">{stat.content}</p>
+                                )}
+                                <p className="text-xs text-muted-foreground mt-1">{stat.correctPercentage}% de acertos</p>
+                              </TooltipContent>
+                            </Tooltip>
                           ))}
                         </div>
                       </CardContent>
                     </Card>
+
+                    {/* Estatísticas por Conteúdo */}
+                    {statistics.contentStats && statistics.contentStats.length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Análise por Conteúdo</CardTitle>
+                          <CardDescription>
+                            Porcentagem de erros por conteúdo/assunto
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-3 max-h-96 overflow-y-auto">
+                            {statistics.contentStats.map((stat, idx) => (
+                              <div key={idx} className="flex items-center justify-between p-3 bg-muted/30 rounded-md">
+                                <div className="flex-1">
+                                  <p className="font-medium text-sm">{stat.content}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {stat.totalQuestions} questão(ões) • {stat.totalAttempts} tentativa(s)
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className={`text-lg font-bold ${
+                                    stat.errorPercentage >= 50 ? "text-red-600" :
+                                    stat.errorPercentage >= 30 ? "text-yellow-600" :
+                                    "text-green-600"
+                                  }`}>
+                                    {stat.errorPercentage}%
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">erros</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Estatísticas por Turma */}
+                    {statistics.turmaStats && statistics.turmaStats.length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Estatísticas por Turma</CardTitle>
+                          <CardDescription>
+                            Desempenho agrupado por turma
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="overflow-x-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Turma</TableHead>
+                                  <TableHead className="text-center">Alunos</TableHead>
+                                  <TableHead className="text-center">Média</TableHead>
+                                  <TableHead className="text-center">Aprovação</TableHead>
+                                  <TableHead className="text-center">Acertos</TableHead>
+                                  <TableHead className="text-center">Erros</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {statistics.turmaStats.map((turma, idx) => (
+                                  <TableRow key={idx}>
+                                    <TableCell className="font-medium">{turma.turma}</TableCell>
+                                    <TableCell className="text-center">{turma.totalAlunos}</TableCell>
+                                    <TableCell className="text-center">
+                                      <span className={`font-semibold ${
+                                        turma.mediaNota >= 60 ? "text-green-600" : "text-red-600"
+                                      }`}>
+                                        {turma.mediaNota}%
+                                      </span>
+                                    </TableCell>
+                                    <TableCell className="text-center">
+                                      <Badge variant={turma.taxaAprovacao >= 60 ? "default" : "secondary"}>
+                                        {turma.taxaAprovacao}%
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-center text-green-600 font-medium">
+                                      {turma.totalAcertos}
+                                    </TableCell>
+                                    <TableCell className="text-center text-red-600 font-medium">
+                                      {turma.totalErros}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Estatísticas por Aluno */}
+                    {statistics.studentStats && statistics.studentStats.length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Estatísticas por Aluno</CardTitle>
+                          <CardDescription>
+                            Desempenho individual de cada aluno (ordenado por nota)
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                            <Table>
+                              <TableHeader className="sticky top-0 bg-card z-10">
+                                <TableRow>
+                                  <TableHead>Matrícula</TableHead>
+                                  <TableHead>Nome</TableHead>
+                                  <TableHead>Turma</TableHead>
+                                  <TableHead className="text-center">Acertos</TableHead>
+                                  <TableHead className="text-center">Erros</TableHead>
+                                  <TableHead className="text-center">Nota</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {statistics.studentStats
+                                  .sort((a, b) => b.nota - a.nota)
+                                  .map((student, idx) => (
+                                  <TableRow key={idx}>
+                                    <TableCell className="font-mono text-sm">{student.matricula}</TableCell>
+                                    <TableCell className="font-medium">{student.nome}</TableCell>
+                                    <TableCell>{student.turma}</TableCell>
+                                    <TableCell className="text-center text-green-600 font-medium">
+                                      {student.acertos}
+                                    </TableCell>
+                                    <TableCell className="text-center text-red-600 font-medium">
+                                      {student.erros}
+                                    </TableCell>
+                                    <TableCell className="text-center">
+                                      <span className={`font-semibold ${
+                                        student.nota >= 60 ? "text-green-600" : "text-red-600"
+                                      }`}>
+                                        {student.nota.toFixed(1)}%
+                                      </span>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
                   </div>
                 )}
               </TabsContent>

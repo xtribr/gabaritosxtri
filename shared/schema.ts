@@ -2,8 +2,9 @@ import { z } from "zod";
 
 export const studentDataSchema = z.object({
   id: z.string(),
-  studentNumber: z.string(),
+  studentNumber: z.string(), // Matrícula (ID único)
   studentName: z.string(),
+  turma: z.string().optional(), // Turma do aluno
   answers: z.array(z.string()),
   rawText: z.string().optional(),
   pageNumber: z.number(),
@@ -13,12 +14,21 @@ export const studentDataSchema = z.object({
   wrongAnswers: z.number().optional(),
 });
 
+export const questionContentSchema = z.object({
+  questionNumber: z.number(), // Número da questão: 1, 2, 3, 4...
+  answer: z.string(), // A, B, C, D, E
+  content: z.string(), // Ex: "mat - geometria", "port - interpretação"
+});
+
 export const answerKeySchema = z.object({
   id: z.string(),
   name: z.string(),
   answers: z.array(z.string()),
+  contents: z.array(questionContentSchema).optional(), // Conteúdos por questão
   createdAt: z.string(),
 });
+
+export type QuestionContent = z.infer<typeof questionContentSchema>;
 
 export const examTemplateSchema = z.object({
   id: z.string(),
@@ -118,7 +128,31 @@ export const examStatisticsSchema = z.object({
     correctCount: z.number(),
     wrongCount: z.number(),
     correctPercentage: z.number(),
+    content: z.string().optional(),
   })),
+  contentStats: z.array(z.object({
+    content: z.string(),
+    totalQuestions: z.number(),
+    totalErrors: z.number(),
+    totalAttempts: z.number(),
+    errorPercentage: z.number(),
+  })).optional(),
+  studentStats: z.array(z.object({
+    matricula: z.string(),
+    nome: z.string(),
+    turma: z.string().optional(),
+    acertos: z.number(),
+    erros: z.number(),
+    nota: z.number(),
+  })).optional(),
+  turmaStats: z.array(z.object({
+    turma: z.string(),
+    totalAlunos: z.number(),
+    mediaNota: z.number(),
+    taxaAprovacao: z.number(),
+    totalAcertos: z.number(),
+    totalErros: z.number(),
+  })).optional(),
 });
 
 export type StudentData = z.infer<typeof studentDataSchema>;
