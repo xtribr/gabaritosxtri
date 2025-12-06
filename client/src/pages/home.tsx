@@ -1267,11 +1267,15 @@ export default function Home() {
       setStudents(prev => prev.map(student => {
         const triScore = calculatedTriScores.get(student.id);
         if (triScore !== undefined) {
+          console.log(`[TRI] Atualizando student ${student.id} - preservando areaScores:`, student.areaScores);
           // NÃO sobrescrever score (TCT) - apenas adicionar triScore
           return {
             ...student,
             triScore: triScore, // Armazenar TRI score (0-1000)
-            // Manter score (TCT) existente, areaScores, areaCorrectAnswers
+            // Explicitamente preservar dados TCT
+            score: student.score, // Manter nota TCT
+            areaScores: student.areaScores, // Manter notas TCT por área
+            areaCorrectAnswers: student.areaCorrectAnswers, // Manter acertos por área
           };
         }
         return student;
@@ -1365,12 +1369,15 @@ export default function Home() {
         // Armazenar como porcentagem para compatibilidade (0-100), será convertido na exibição
         const tctPercentage = averageTCT * 10; // Multiplicar por 10 para converter 0-10 em 0-100
         
+        console.log(`[TCT] Atualizando student ${student.id} - preservando triScore:`, student.triScore);
+        
         return {
           ...student, // Manter TUDO do aluno (incluindo triScore se existir)
           score: tctPercentage,
           areaScores: areaScoresMap, // Armazenar notas TCT por área
           areaCorrectAnswers: areaCorrectAnswersMap, // Armazenar acertos por área
-          // NÃO sobrescrever triScore se já existir
+          // Explicitamente preservar triScore se existir
+          triScore: student.triScore,
         };
       }));
     } else {
