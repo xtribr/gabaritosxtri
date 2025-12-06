@@ -203,6 +203,9 @@ export default function Home() {
         correctAnswers,
         wrongAnswers,
         areaCorrectAnswers, // Adicionar acertos por área
+        // IMPORTANTE: Preservar explicitamente areaScores (TCT) e triScore (TRI) se existirem
+        areaScores: student.areaScores, // Notas TCT por área
+        triScore: student.triScore, // Nota TRI geral
       };
     });
   }, [students, answerKey, selectedTemplate.name, numQuestions, getAreasByTemplate]);
@@ -793,14 +796,78 @@ export default function Home() {
     return processedStudents;
   };
 
+  /**
+   * Mescla novos alunos com existentes usando studentNumber como chave única.
+   * Preserva scores de áreas já calculadas (TRI/TCT).
+   */
+  const mergeStudents = (existingStudents: StudentData[], newStudents: StudentData[]): StudentData[] => {
+    const studentMap = new Map<string, StudentData>();
+    
+    // Primeiro, adiciona todos os alunos existentes
+    existingStudents.forEach(student => {
+      studentMap.set(student.studentNumber, student);
+    });
+    
+    // Depois, mescla ou adiciona novos alunos
+    newStudents.forEach(newStudent => {
+      const existing = studentMap.get(newStudent.studentNumber);
+      
+      if (existing) {
+        // Merge: preserva dados existentes e adiciona novas respostas
+        console.log(`[MERGE] Mesclando aluno ${newStudent.studentNumber}: preservando scores existentes`);
+        
+        const merged: StudentData = {
+          ...existing,
+          // Atualiza apenas campos que fazem sentido atualizar
+          studentName: newStudent.studentName || existing.studentName,
+          turma: newStudent.turma || existing.turma,
+          
+          // Mescla answers: prioriza novas respostas quando não vazias
+          answers: existing.answers.map((existingAnswer, index) => {
+            const newAnswer = newStudent.answers[index];
+            // Se a nova resposta não está vazia, usa ela; senão mantém a existente
+            return (newAnswer && newAnswer.trim() !== '') ? newAnswer : existingAnswer;
+          }),
+          
+          // Preserva scores existentes de áreas já calculadas
+          areaScores: {
+            ...existing.areaScores,
+            ...newStudent.areaScores, // Adiciona novas áreas calculadas
+          },
+          
+          areaCorrectAnswers: {
+            ...existing.areaCorrectAnswers,
+            ...newStudent.areaCorrectAnswers,
+          },
+          
+          // Preserva scores gerais se existirem
+          score: existing.score, // Preserva TCT médio
+          triScore: existing.triScore, // Preserva TRI médio
+          
+          // Atualiza metadados do processamento
+          pageNumber: newStudent.pageNumber,
+          confidence: newStudent.confidence,
+        };
+        
+        studentMap.set(newStudent.studentNumber, merged);
+      } else {
+        // Novo aluno
+        console.log(`[MERGE] Adicionando novo aluno ${newStudent.studentNumber}`);
+        studentMap.set(newStudent.studentNumber, newStudent);
+      }
+    });
+    
+    return Array.from(studentMap.values());
+  };
+
   const handleBatchProcess = async () => {
     if (fileQueue.length === 0) return;
 
     setStatus("processing");
-    setStudents([]);
+    // NÃO limpa mais os alunos existentes - vai fazer merge
     setErrorMessage("");
     
-    let allStudents: StudentData[] = [];
+    let allStudents: StudentData[] = [...students]; // Começa com alunos existentes
     let processedCount = 0;
     let errorCount = 0;
 
@@ -818,7 +885,8 @@ export default function Home() {
 
       try {
         const fileStudents = await processSingleFile(queuedFile);
-        allStudents = [...allStudents, ...fileStudents];
+        // Usa mergeStudents para preservar dados de alunos existentes
+        allStudents = mergeStudents(allStudents, fileStudents);
         setStudents([...allStudents]);
         processedCount++;
         
@@ -901,7 +969,8 @@ export default function Home() {
     }
 
     const triScoresMap = new Map<string, { sum: number; count: number }>();
-    const triScoresByAreaMap = new Map<string, Record<string, number>>(); // Map<studentId, {LC: number, CH: number, CN: number, MT: number}>
+    // IMPORTANTE: Preservar áreas já calculadas anteriormente
+    const triScoresByAreaMap = new Map<string, Record<string, number>>(triScoresByArea); // Começa com o Map existente
 
     for (const { area, start, end } of areas) {
       try {
@@ -992,8 +1061,10 @@ export default function Home() {
               
               // Armazenar nota TRI por área
               const areaData = triScoresByAreaMap.get(result.studentId) || {};
+              console.log(`[TRI] Área ${area}: studentId ${result.studentId} - áreas existentes:`, Object.keys(areaData));
               areaData[area] = result.triScore;
               triScoresByAreaMap.set(result.studentId, areaData);
+              console.log(`[TRI] Área ${area}: studentId ${result.studentId} - após adicionar ${area}:`, areaData);
               
               console.log(`[TRI] Área ${area}: ✅ studentId ${result.studentId} adicionado ao Map com triScore=${result.triScore.toFixed(1)}`);
               console.log(`[TRI] Área ${area}: Map agora tem ${triScoresMap.size} entradas`);
