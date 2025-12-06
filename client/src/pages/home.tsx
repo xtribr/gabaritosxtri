@@ -1411,9 +1411,12 @@ export default function Home() {
     if (areas.length > 0) {
       // ENEM: calcular cada área separadamente (0,0 a 10,0) e fazer MÉDIA
       setStudents(prev => prev.map(student => {
-        const areaScoresMap: Record<string, number> = {};
-        const areaCorrectAnswersMap: Record<string, number> = {};
+        // IMPORTANTE: Preservar áreas já calculadas anteriormente
+        const areaScoresMap: Record<string, number> = { ...(student.areaScores || {}) };
+        const areaCorrectAnswersMap: Record<string, number> = { ...(student.areaCorrectAnswers || {}) };
         const areaScores: number[] = [];
+        
+        console.log(`[TCT] Student ${student.id} - Áreas existentes antes do cálculo:`, Object.keys(areaScoresMap));
         
         areas.forEach(({ area, start, end }) => {
           const answersForArea = student.answers.slice(start - 1, end);
@@ -1439,17 +1442,24 @@ export default function Home() {
           areaScores.push(areaScore);
         });
         
-        // Nota final TCT: MÉDIA das áreas (0,0 a 10,0)
+        console.log(`[TCT] Student ${student.id} - Áreas calculadas agora:`, areas.map(a => a.area));
+        console.log(`[TCT] Student ${student.id} - Todas as áreas após cálculo:`, Object.keys(areaScoresMap));
+        
+        // Nota final TCT: MÉDIA de TODAS as áreas (existentes + novas)
+        // Pegar scores de todas as áreas no mapa (LC, CH, CN, MT)
+        const allAreaScores = Object.values(areaScoresMap);
+        
         // Cada área tem nota individual de 0,0 a 10,0
         // A nota final é a média das áreas
-        const averageTCT = areaScores.length > 0 
-          ? areaScores.reduce((sum, score) => sum + score, 0) / areaScores.length 
+        const averageTCT = allAreaScores.length > 0 
+          ? allAreaScores.reduce((sum, score) => sum + score, 0) / allAreaScores.length 
           : 0;
         
         // Armazenar como porcentagem para compatibilidade (0-100), será convertido na exibição
         const tctPercentage = averageTCT * 10; // Multiplicar por 10 para converter 0-10 em 0-100
         
-        console.log(`[TCT] Atualizando student ${student.id} - preservando triScore:`, student.triScore);
+        console.log(`[TCT] Student ${student.id} - Média TCT final: ${averageTCT.toFixed(1)}/10.0 (${allAreaScores.length} áreas)`);
+        console.log(`[TCT] Student ${student.id} - Preservando triScore:`, student.triScore);
         
         return {
           ...student, // Manter TUDO do aluno (incluindo triScore se existir)
