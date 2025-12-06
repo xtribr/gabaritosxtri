@@ -14,6 +14,7 @@ import { processOMRPage, extractTextRegion, preprocessForOCR } from "./omr";
 import { extractTextFromImageDeepSeek, checkOCRService } from "./deepseekOCR.js";
 import { callChatGPTVisionOMR } from "./chatgptOMR.js";
 import { registerDebugRoutes } from "./debugRoutes.js";
+import { gerarAnaliseDetalhada } from "./conteudosLoader.js";
 
 // Configuração do serviço Python OMR
 const PYTHON_OMR_SERVICE_URL = process.env.PYTHON_OMR_URL || "http://localhost:5002";
@@ -1334,6 +1335,198 @@ export async function registerRoutes(
       console.error("[TRI BACKEND] Erro ao calcular TRI:", error);
       res.status(500).json({
         error: "Erro ao calcular notas TRI",
+        details: error instanceof Error ? error.message : "Erro desconhecido",
+      });
+    }
+  });
+
+  // Análise pedagógica com IA
+  app.post("/api/analyze-performance", async (req: Request, res: Response) => {
+    try {
+      const { students, triScores, triScoresByArea } = req.body;
+
+      if (!students || !triScores) {
+        res.status(400).json({ error: "Dados incompletos" });
+        return;
+      }
+
+      // Calcular estatísticas básicas
+      const triValues = Object.values(triScores) as number[];
+      const avgTRI = triValues.reduce((a, b) => a + b, 0) / triValues.length;
+      
+      // Agrupar alunos por desempenho
+      const grupos = {
+        reforco: triValues.filter(t => t < 400).length,
+        direcionado: triValues.filter(t => t >= 400 && t < 550).length,
+        aprofundamento: triValues.filter(t => t >= 550).length,
+      };
+
+      // Análise por área
+      const areaAnalysis: Record<string, any> = {};
+      if (triScoresByArea) {
+        const areas = ['LC', 'CH', 'CN', 'MT'];
+        const areaNames: Record<string, string> = {
+          'LC': 'Linguagens e Códigos',
+          'CH': 'Ciências Humanas',
+          'CN': 'Ciências da Natureza',
+          'MT': 'Matemática'
+        };
+
+        for (const area of areas) {
+          const scoresForArea = Object.values(triScoresByArea)
+            .map((scores: any) => scores[area])
+            .filter((score): score is number => typeof score === 'number' && score > 0);
+          
+          if (scoresForArea.length > 0) {
+            const areaAvg = scoresForArea.reduce((a, b) => a + b, 0) / scoresForArea.length;
+            const diff = areaAvg - avgTRI;
+            areaAnalysis[area] = {
+              name: areaNames[area],
+              average: Math.round(areaAvg),
+              diff: Math.round(diff),
+              status: diff < -20 ? 'critical' : diff < 0 ? 'warning' : 'good',
+              count: scoresForArea.length
+            };
+          }
+        }
+      }
+
+      // Identificar alunos por faixa de desempenho para análise detalhada
+      const studentsByPerformance = students.map((s: any) => ({
+        name: s.studentName || s.studentNumber,
+        tri: triScores[s.id],
+        areas: triScoresByArea?.[s.id] || {}
+      })).sort((a, b) => (a.tri || 0) - (b.tri || 0));
+
+      const top3 = studentsByPerformance.slice(-3).reverse();
+      const bottom3 = studentsByPerformance.slice(0, 3);
+
+      // NOVA ANÁLISE GRANULAR: Habilidades no range de TRI da turma
+      let analiseHabilidades = '';
+      try {
+        const { getHabilidadesPorTRI } = await import('./conteudosLoader.js');
+        analiseHabilidades = getHabilidadesPorTRI(Math.round(avgTRI), 10);
+        console.log('[AI Analysis] Análise de habilidades gerada com sucesso');
+      } catch (error) {
+        console.error('[AI Analysis] Erro ao gerar análise de habilidades:', error);
+        analiseHabilidades = '\n⚠️ Não foi possível carregar dados de conteúdos ENEM.\n';
+      }
+
+      // Construir prompt para ChatGPT
+      const prompt = `Você é um coordenador pedagógico especialista em ENEM e TRI. Analise esta turma e forneça um relatório EXECUTIVO e ACIONÁVEL:
+
+📊 CONTEXTO DA TURMA:
+- Total: ${students.length} alunos
+- TRI médio geral: ${Math.round(avgTRI)} (meta ENEM: 500+)
+- Distribuição:
+  * ${grupos.reforco} alunos em RISCO (TRI < 400) - precisam reforço URGENTE
+  * ${grupos.direcionado} alunos em DESENVOLVIMENTO (TRI 400-550) - próximos da meta
+  * ${grupos.aprofundamento} alunos ACIMA da meta (TRI > 550) - podem ser monitores
+
+📈 DESEMPENHO POR ÁREA (Comparativo com média da turma):
+${Object.entries(areaAnalysis).map(([code, data]: [string, any]) => {
+  const status = data.diff < -20 ? '🔴 CRÍTICO' : data.diff < 0 ? '🟡 ATENÇÃO' : '🟢 BOM';
+  return `- ${data.name}: ${data.average} pontos (${data.diff >= 0 ? '+' : ''}${data.diff} pts) ${status}`;
+}).join('\n')}
+${analiseHabilidades}
+
+👥 DESTAQUES INDIVIDUAIS:
+Melhores desempenhos:
+${top3.map((s, i) => `${i+1}. ${s.name}: ${Math.round(s.tri)} (LC:${Math.round(s.areas.LC||0)} CH:${Math.round(s.areas.CH||0)} CN:${Math.round(s.areas.CN||0)} MT:${Math.round(s.areas.MT||0)})`).join('\n')}
+
+Precisam atenção urgente:
+${bottom3.map((s, i) => `${i+1}. ${s.name}: ${Math.round(s.tri)} (LC:${Math.round(s.areas.LC||0)} CH:${Math.round(s.areas.CH||0)} CN:${Math.round(s.areas.CN||0)} MT:${Math.round(s.areas.MT||0)})`).join('\n')}
+
+🎯 FORNEÇA ANÁLISE ESTRUTURADA:
+
+**ATENÇÃO**: Use as habilidades listadas acima (no range de TRI ${Math.round(avgTRI)}) para suas recomendações!
+Cada área tem 10 habilidades prioritárias que a turma DEVERIA dominar nesse nível.
+
+## 1. DIAGNÓSTICO (2-3 frases diretas)
+- Qual a maior fraqueza da turma?
+- Quais áreas comprometem mais o TRI geral?
+- O que separa os alunos de risco dos que estão próximos da meta?
+
+## 2. AÇÕES IMEDIATAS (próximas 2 semanas)
+Liste 3-4 ações CONCRETAS que podem ser implementadas JÁ:
+- **CITE AS HABILIDADES ESPECÍFICAS** (ex: H5, H12) que estão no range de TRI da turma
+- Exemplo: "Plantão focado em Linguagens H1 e H10 (interpretação e gêneros textuais) - 2x/semana, terças 14h"
+- Seja específico sobre QUEM faz, O QUE faz (qual habilidade), e QUANDO faz
+
+## 3. ESTRATÉGIA POR GRUPO
+- **${grupos.reforco} alunos em RISCO**: Quais das habilidades listadas devem ser priorizadas?
+- **${grupos.direcionado} alunos em DESENVOLVIMENTO**: Como acelerar usando as habilidades do range?
+- **${grupos.aprofundamento} alunos ACIMA da meta**: Como usar esse grupo a favor da turma?
+
+## 4. META REALISTA (6 semanas)
+- Quantos alunos podem sair da faixa de RISCO?
+- Qual TRI médio esperado por área (LC/CH/CN/MT)?
+- Qual o ganho de pontos mais realista considerando o tempo?
+
+IMPORTANTE: 
+- **USE AS HABILIDADES LISTADAS** - não invente habilidades genéricas
+- SEJA CIRÚRGICO: cite códigos de habilidades (H1, H5, etc), números, áreas específicas
+- Mencione pelo menos 3-4 habilidades específicas nas suas recomendações
+- PENSE como coordenador que precisa apresentar isso para a direção AMANHÃ
+- Máximo 500 palavras, foco em RESULTADOS e AÇÕES`;
+
+      // Chamar OpenAI
+      const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+      const CHATGPT_MODEL = process.env.CHATGPT_MODEL || "gpt-4o-mini";
+
+      if (!OPENAI_API_KEY) {
+        res.status(500).json({ 
+          error: "ChatGPT não configurado. Configure OPENAI_API_KEY nas variáveis de ambiente." 
+        });
+        return;
+      }
+
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: CHATGPT_MODEL,
+          messages: [
+            {
+              role: "system",
+              content: "Você é um coordenador pedagógico com 15 anos de experiência em preparação para ENEM. Você é DIRETO, ESPECÍFICO e focado em RESULTADOS. Evite teoria educacional genérica. Foque em ações que podem ser implementadas HOJE e geram resultados em semanas. Use dados e números. Seja conciso."
+            },
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+          temperature: 0.8,
+          max_tokens: 1500,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(`OpenAI API error: ${JSON.stringify(error)}`);
+      }
+
+      const data = await response.json();
+      const analysis = data.choices[0].message.content;
+
+      res.json({
+        success: true,
+        analysis,
+        statistics: {
+          avgTRI: Math.round(avgTRI),
+          totalStudents: students.length,
+          grupos,
+          areaAnalysis,
+        },
+      });
+
+    } catch (error) {
+      console.error("[Análise IA] Erro:", error);
+      res.status(500).json({
+        error: "Erro ao gerar análise com IA",
         details: error instanceof Error ? error.message : "Erro desconhecido",
       });
     }

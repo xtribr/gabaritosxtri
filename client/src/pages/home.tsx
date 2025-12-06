@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
-import { Upload, FileText, Download, Trash2, RefreshCw, CheckCircle, AlertCircle, Loader2, X, FileSpreadsheet, ClipboardList, Calculator, BarChart3, Plus, Minus, Info, HelpCircle, Users, FileUp, Eye, Moon, Sun } from "lucide-react";
+import { Upload, FileText, Download, Trash2, RefreshCw, CheckCircle, AlertCircle, Loader2, X, FileSpreadsheet, ClipboardList, Calculator, BarChart3, Plus, Minus, Info, HelpCircle, Users, FileUp, Eye, Moon, Sun, TrendingUp, Target, UserCheck } from "lucide-react";
 import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, ScatterChart, Scatter, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, LineChart, Line } from "recharts";
 import { Button } from "@/components/ui/button";
@@ -92,6 +92,8 @@ export default function Home() {
   const [triScoresByArea, setTriScoresByArea] = useState<Map<string, Record<string, number>>>(new Map()); // Map<studentId, {LC: number, CH: number, CN: number, MT: number}>
   const [triScoresCount, setTriScoresCount] = useState<number>(0); // Contador para forçar atualização do React
   const [mainActiveTab, setMainActiveTab] = useState<string>("alunos"); // Aba principal: alunos, gabarito, tri, tct, conteudos
+  const [aiAnalysis, setAiAnalysis] = useState<string>(""); // Análise gerada pela IA
+  const [aiAnalysisLoading, setAiAnalysisLoading] = useState<boolean>(false); // Loading da análise IA
   
   const [selectedTemplateIndex, setSelectedTemplateIndex] = useState<number>(6);
   const [customValidAnswers, setCustomValidAnswers] = useState<string>("A,B,C,D,E");
@@ -645,6 +647,64 @@ export default function Home() {
         description: "Não foi possível processar o gabarito.",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleGenerateAIAnalysis = async () => {
+    if (triScoresCount === 0) {
+      toast({
+        title: "Sem dados TRI",
+        description: "Calcule as notas TRI primeiro para gerar análise.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setAiAnalysisLoading(true);
+    try {
+      // Converter Maps para objetos serializáveis
+      const triScoresObj = Object.fromEntries(Array.from(triScores.entries()));
+      const triScoresByAreaObj = Object.fromEntries(
+        Array.from(triScoresByArea.entries()).map(([studentId, areaScores]) => [
+          studentId,
+          areaScores
+        ])
+      );
+
+      const response = await fetch("/api/analyze-performance", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ 
+          students,
+          triScores: triScoresObj,
+          triScoresByArea: triScoresByAreaObj,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Erro desconhecido" }));
+        throw new Error(errorData.error || "Erro ao gerar análise");
+      }
+
+      const data = await response.json();
+      setAiAnalysis(data.analysis);
+
+      toast({
+        title: "Análise gerada!",
+        description: "A análise pedagógica foi criada com sucesso.",
+      });
+    } catch (error) {
+      console.error("Error generating AI analysis:", error);
+      const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
+      toast({
+        title: "Erro",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setAiAnalysisLoading(false);
     }
   };
 
@@ -2741,10 +2801,6 @@ export default function Home() {
                   <BarChart3 className="h-4 w-4 mr-2" />
                   Scores
                 </TabsTrigger>
-                <TabsTrigger value="gabarito" data-testid="tab-gabarito">
-                  <ClipboardList className="h-4 w-4 mr-2" />
-                  Gabarito
-                </TabsTrigger>
                 <TabsTrigger 
                   value="tri" 
                   data-testid="tab-tri"
@@ -2759,6 +2815,14 @@ export default function Home() {
                 <TabsTrigger value="conteudos" data-testid="tab-conteudos" disabled={!statistics}>
                   <FileText className="h-4 w-4 mr-2" />
                   Conteúdos
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="relatorio-xtri" 
+                  data-testid="tab-relatorio-xtri"
+                  disabled={triScoresCount === 0}
+                >
+                  <TrendingUp className="h-4 w-4 mr-2" />
+                  Relatório XTRI
                 </TabsTrigger>
               </TabsList>
 
@@ -3086,85 +3150,6 @@ export default function Home() {
                     </div>
                   </CardContent>
                 </Card>
-              </TabsContent>
-
-              {/* ABA 3: GABARITO */}
-              <TabsContent value="gabarito" className="mt-4">
-                {answerKey.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Gabarito Oficial</CardTitle>
-                      <CardDescription>
-                        Layout de 6 colunas - leitura vertical (de cima para baixo em cada coluna). Formato idêntico ao gabarito físico.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        {/* Layout em 6 colunas - leitura VERTICAL (igual gabarito físico) */}
-                        <div className="grid grid-cols-6 gap-4">
-                          {[0, 1, 2, 3, 4, 5].map((colIndex) => {
-                            // Calcular quantas questões por coluna (15 questões por coluna para 90 questões)
-                            const questionsPerColumn = Math.ceil(answerKey.length / 6);
-                            
-                            return (
-                              <div key={colIndex} className="space-y-2">
-                                {/* Cabeçalho da coluna */}
-                                <div className="text-center font-semibold text-sm text-muted-foreground border-b pb-2">
-                                  Col {colIndex + 1}
-                                </div>
-                                
-                                {/* Questões desta coluna (de cima para baixo) */}
-                                {Array.from({ length: questionsPerColumn }).map((_, rowIndex) => {
-                                  // Índice da questão: coluna atual + (linha * 6)
-                                  const questionIndex = colIndex + (rowIndex * 6);
-                                  
-                                  if (questionIndex >= answerKey.length) return null;
-                                  
-                                  const answer = answerKey[questionIndex];
-                                  const questionNumber = questionIndex + 1;
-                                  
-                                  return (
-                                    <div key={questionIndex} className="flex items-center gap-2 p-1 hover:bg-muted/30 rounded border border-transparent hover:border-muted">
-                                      <span className="text-xs text-muted-foreground w-6 text-right font-mono font-semibold">
-                                        {questionNumber.toString().padStart(2, '0')}
-                                      </span>
-                                      <Input
-                                        value={answer != null ? String(answer) : ""}
-                                        onChange={(e) => updateAnswerKeyValue(questionIndex, e.target.value.toUpperCase())}
-                                        className="h-9 w-12 text-center font-bold text-lg p-0 uppercase"
-                                        maxLength={1}
-                                        data-testid={`input-key-${questionIndex}`}
-                                        placeholder="?"
-                                      />
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        
-                        {questionContents.length > 0 && questionContents.some(c => c.content.trim()) && (
-                          <div className="border-t pt-4 mt-4">
-                            <CardTitle className="text-sm mb-3">Conteúdos das Questões</CardTitle>
-                            <div className="grid gap-2 max-h-96 overflow-y-auto">
-                              {questionContents.map((content, index) => {
-                                if (!content.content.trim()) return null;
-                                return (
-                                  <div key={index} className="flex items-center gap-3 p-2 bg-muted/30 rounded-md text-sm">
-                                    <span className="font-mono text-muted-foreground w-12">Q{content.questionNumber || index + 1}:</span>
-                                    <Badge variant="outline" className="w-8 text-center">{content.answer}</Badge>
-                                    <span className="flex-1">{content.content}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
               </TabsContent>
 
               {/* ABA 3: ESTATISTICAS TRI */}
@@ -3623,6 +3608,280 @@ export default function Home() {
                         </CardContent>
                       </Card>
                     )}
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* ABA 7: RELATÓRIO XTRI */}
+              <TabsContent value="relatorio-xtri" className="mt-4">
+                {triScoresCount > 0 && (
+                  <div className="space-y-6">
+                    {/* Header com informações gerais */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <TrendingUp className="h-5 w-5" />
+                          Relatório de Performance XTRI
+                        </CardTitle>
+                        <CardDescription>
+                          Análise diagnóstica para coordenação pedagógica
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                          <div className="flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                            <Users className="h-8 w-8 text-blue-600" />
+                            <div>
+                              <p className="text-sm text-muted-foreground">Total de Alunos</p>
+                              <p className="text-2xl font-bold">{students.length}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-950 rounded-lg">
+                            <BarChart3 className="h-8 w-8 text-green-600" />
+                            <div>
+                              <p className="text-sm text-muted-foreground">TRI Médio da Turma</p>
+                              <p className="text-2xl font-bold">
+                                {triScoresCount > 0 
+                                  ? Math.round(Array.from(triScores.values()).reduce((a, b) => a + b, 0) / triScoresCount)
+                                  : 0
+                                }
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 p-4 bg-purple-50 dark:bg-purple-950 rounded-lg">
+                            <Target className="h-8 w-8 text-purple-600" />
+                            <div>
+                              <p className="text-sm text-muted-foreground">Avaliações TRI</p>
+                              <p className="text-2xl font-bold">{triScoresCount}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-3">
+                          <Button 
+                            className="flex-1" 
+                            variant="default"
+                            onClick={handleGenerateAIAnalysis}
+                            disabled={aiAnalysisLoading}
+                          >
+                            {aiAnalysisLoading ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Gerando análise...
+                              </>
+                            ) : (
+                              <>
+                                <Target className="h-4 w-4 mr-2" />
+                                Gerar Análise Detalhada com IA
+                              </>
+                            )}
+                          </Button>
+                          <Button variant="outline">
+                            <Download className="h-4 w-4 mr-2" />
+                            Exportar PDF
+                          </Button>
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-2 italic">
+                          💡 A IA não gosta de TRI e leva um tempo pra acordar
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    {/* Análise da IA */}
+                    {aiAnalysis && (
+                      <Card className="border-blue-200 dark:border-blue-800">
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <Target className="h-5 w-5 text-blue-600" />
+                            Análise Pedagógica Detalhada
+                          </CardTitle>
+                          <CardDescription>
+                            Insights gerados por Inteligência Artificial
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="prose dark:prose-invert max-w-none">
+                            <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                              {aiAnalysis}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Seção de Prioridades */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">🚨 Prioridades de Intervenção</CardTitle>
+                        <CardDescription>
+                          Áreas que necessitam atenção imediata baseadas no desempenho TRI
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="p-4 border-l-4 border-red-500 bg-red-50 dark:bg-red-950/20 rounded-r-lg">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="destructive">CRÍTICO</Badge>
+                                <h4 className="font-semibold">Análise em desenvolvimento</h4>
+                              </div>
+                            </div>
+                            <p className="text-sm text-muted-foreground mb-3">
+                              O sistema está sendo desenvolvido para identificar automaticamente as áreas prioritárias
+                              com base no desempenho TRI dos alunos e no banco de conteúdos ENEM.
+                            </p>
+                            <div className="flex items-center gap-2 text-sm">
+                              <Info className="h-4 w-4" />
+                              <span>Use o botão "Gerar Análise Detalhada com IA" para obter insights personalizados</span>
+                            </div>
+                          </div>
+
+                          <div className="p-4 border-l-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20 rounded-r-lg">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="border-yellow-500 text-yellow-700 dark:text-yellow-400">
+                                  EM BREVE
+                                </Badge>
+                                <h4 className="font-semibold">Análise por Habilidade</h4>
+                              </div>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              Sistema identificará automaticamente quais habilidades (H1-H30) necessitam reforço,
+                              com sugestões de conteúdos específicos do banco ENEM.
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Desempenho por Área */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">📊 Desempenho por Área do Conhecimento</CardTitle>
+                        <CardDescription>
+                          Comparativo de TRI médio por área
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          {(() => {
+                            const areas = ['LC', 'CH', 'CN', 'MT'];
+                            const areaNames = {
+                              'LC': 'Linguagens e Códigos',
+                              'CH': 'Ciências Humanas',
+                              'CN': 'Ciências da Natureza',
+                              'MT': 'Matemática'
+                            };
+                            const triMedio = triScoresCount > 0 
+                              ? Array.from(triScores.values()).reduce((a, b) => a + b, 0) / triScoresCount
+                              : 0;
+
+                            return areas.map(area => {
+                              const studentsForArea = Array.from(triScoresByArea.values())
+                                .map(areaScores => areaScores[area])
+                                .filter((score): score is number => score !== undefined && score > 0);
+                              
+                              if (studentsForArea.length === 0) return null;
+
+                              const areaAvg = studentsForArea.reduce((a, b) => a + b, 0) / studentsForArea.length;
+                              const diff = areaAvg - triMedio;
+                              const status = diff < -20 ? 'critical' : diff < 0 ? 'warning' : 'good';
+
+                              return (
+                                <div key={area} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <h4 className="font-semibold">{areaNames[area as keyof typeof areaNames]}</h4>
+                                      {status === 'critical' && <Badge variant="destructive">⚠️ Atenção</Badge>}
+                                      {status === 'warning' && <Badge variant="outline">Abaixo da média</Badge>}
+                                      {status === 'good' && <Badge variant="default" className="bg-green-600">✓ Bom</Badge>}
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">
+                                      {studentsForArea.length} aluno(s) avaliado(s)
+                                    </p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-2xl font-bold">{Math.round(areaAvg)}</p>
+                                    <p className={`text-sm ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                      {diff >= 0 ? '+' : ''}{Math.round(diff)} da média
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Grupos de Intervenção */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">👥 Grupos de Intervenção Sugeridos</CardTitle>
+                        <CardDescription>
+                          Estratificação dos alunos por nível de desempenho TRI
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          {(() => {
+                            const triValues = Array.from(triScores.values());
+                            const grupoReforco = triValues.filter(t => t < 400).length;
+                            const grupoDirecionado = triValues.filter(t => t >= 400 && t < 550).length;
+                            const grupoAprofundamento = triValues.filter(t => t >= 550).length;
+
+                            return (
+                              <>
+                                <div className="flex items-center gap-4 p-4 bg-red-50 dark:bg-red-950/20 rounded-lg border-l-4 border-red-500">
+                                  <div className="flex-shrink-0">
+                                    <div className="w-12 h-12 bg-red-600 text-white rounded-full flex items-center justify-center font-bold text-lg">
+                                      {grupoReforco}
+                                    </div>
+                                  </div>
+                                  <div className="flex-1">
+                                    <h4 className="font-semibold mb-1">🔴 Reforço Intensivo</h4>
+                                    <p className="text-sm text-muted-foreground">
+                                      TRI &lt; 400 • Necessita acompanhamento especial
+                                    </p>
+                                  </div>
+                                  <UserCheck className="h-5 w-5 text-red-600" />
+                                </div>
+
+                                <div className="flex items-center gap-4 p-4 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg border-l-4 border-yellow-500">
+                                  <div className="flex-shrink-0">
+                                    <div className="w-12 h-12 bg-yellow-600 text-white rounded-full flex items-center justify-center font-bold text-lg">
+                                      {grupoDirecionado}
+                                    </div>
+                                  </div>
+                                  <div className="flex-1">
+                                    <h4 className="font-semibold mb-1">🟡 Reforço Direcionado</h4>
+                                    <p className="text-sm text-muted-foreground">
+                                      TRI 400-550 • Maior potencial de crescimento
+                                    </p>
+                                  </div>
+                                  <UserCheck className="h-5 w-5 text-yellow-600" />
+                                </div>
+
+                                <div className="flex items-center gap-4 p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border-l-4 border-green-500">
+                                  <div className="flex-shrink-0">
+                                    <div className="w-12 h-12 bg-green-600 text-white rounded-full flex items-center justify-center font-bold text-lg">
+                                      {grupoAprofundamento}
+                                    </div>
+                                  </div>
+                                  <div className="flex-1">
+                                    <h4 className="font-semibold mb-1">🟢 Aprofundamento</h4>
+                                    <p className="text-sm text-muted-foreground">
+                                      TRI &gt; 550 • Desafios avançados
+                                    </p>
+                                  </div>
+                                  <UserCheck className="h-5 w-5 text-green-600" />
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
                 )}
               </TabsContent>
