@@ -2730,29 +2730,42 @@ export default function Home() {
                               />
                             </TableCell>
                             <TableCell className="h-12">
-                              <div className="flex flex-wrap gap-1">
-                                {student.answers.map((answer, ansIndex) => {
-                                  const answerStr = answer != null ? String(answer) : "";
-                                  const keyStr = answerKey.length > 0 && ansIndex < answerKey.length && answerKey[ansIndex] != null 
-                                    ? String(answerKey[ansIndex]) : "";
-                                  
-                                  const isCorrect = keyStr !== "" && 
-                                    answerStr.toUpperCase().trim() === keyStr.toUpperCase().trim();
-                                  const isWrong = keyStr !== "" && 
-                                    answerStr.trim() !== "" && answerStr.toUpperCase().trim() !== keyStr.toUpperCase().trim();
+                              {/* Layout em 6 colunas - leitura VERTICAL (igual gabarito físico) */}
+                              <div className="grid grid-cols-6 gap-2">
+                                {[0, 1, 2, 3, 4, 5].map((colIndex) => {
+                                  const questionsPerColumn = Math.ceil(student.answers.length / 6);
                                   
                                   return (
-                                    <Input
-                                      key={ansIndex}
-                                      value={answerStr || ""}
-                                      onChange={(e) => updateStudentAnswer(index, ansIndex, e.target.value)}
-                                      className={`h-7 w-8 text-center text-xs font-mono p-0 ${
-                                        isCorrect ? "border-green-500 bg-green-50 dark:bg-green-950" : 
-                                        isWrong ? "border-red-500 bg-red-50 dark:bg-red-950" : ""
-                                      }`}
-                                      maxLength={1}
-                                      data-testid={`input-answer-${index}-${ansIndex}`}
-                                    />
+                                    <div key={colIndex} className="flex flex-col gap-1">
+                                      {Array.from({ length: questionsPerColumn }).map((_, rowIndex) => {
+                                        const ansIndex = colIndex + (rowIndex * 6);
+                                        if (ansIndex >= student.answers.length) return null;
+                                        
+                                        const answer = student.answers[ansIndex];
+                                        const answerStr = answer != null ? String(answer) : "";
+                                        const keyStr = answerKey.length > 0 && ansIndex < answerKey.length && answerKey[ansIndex] != null 
+                                          ? String(answerKey[ansIndex]) : "";
+                                        
+                                        const isCorrect = keyStr !== "" && 
+                                          answerStr.toUpperCase().trim() === keyStr.toUpperCase().trim();
+                                        const isWrong = keyStr !== "" && 
+                                          answerStr.trim() !== "" && answerStr.toUpperCase().trim() !== keyStr.toUpperCase().trim();
+                                        
+                                        return (
+                                          <Input
+                                            key={ansIndex}
+                                            value={answerStr || ""}
+                                            onChange={(e) => updateStudentAnswer(index, ansIndex, e.target.value)}
+                                            className={`h-7 w-8 text-center text-xs font-mono p-0 ${
+                                              isCorrect ? "border-green-500 bg-green-50 dark:bg-green-950" : 
+                                              isWrong ? "border-red-500 bg-red-50 dark:bg-red-950" : ""
+                                            }`}
+                                            maxLength={1}
+                                            data-testid={`input-answer-${index}-${ansIndex}`}
+                                          />
+                                        );
+                                      })}
+                                    </div>
                                   );
                                 })}
                               </div>
