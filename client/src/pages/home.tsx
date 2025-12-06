@@ -659,6 +659,23 @@ export default function Home() {
     }
 
     try {
+      // Converter Maps para objetos serializáveis
+      const triScoresObj = triScores.size > 0 
+        ? Object.fromEntries(Array.from(triScores.entries())) 
+        : undefined;
+      
+      const triScoresByAreaObj = triScoresByArea.size > 0
+        ? Object.fromEntries(
+            Array.from(triScoresByArea.entries()).map(([studentId, areaScores]) => [
+              studentId,
+              areaScores
+            ])
+          )
+        : undefined;
+
+      console.log("[EXPORT] triScoresObj:", triScoresObj);
+      console.log("[EXPORT] triScoresByAreaObj:", triScoresByAreaObj);
+
       const response = await fetch("/api/export-excel", {
         method: "POST",
         headers: {
@@ -670,13 +687,15 @@ export default function Home() {
           questionContents: questionContents.length > 0 ? questionContents : undefined,
           statistics: statistics || undefined,
           includeTRI: triScores.size > 0,
-          triScores: triScores.size > 0 ? Object.fromEntries(triScores) : undefined,
-          triScoresByArea: triScoresByArea.size > 0 ? Object.fromEntries(triScoresByArea) : undefined,
+          triScores: triScoresObj,
+          triScoresByArea: triScoresByAreaObj,
         }),
       });
 
       if (!response.ok) {
-        throw new Error("Erro na exportação");
+        const errorData = await response.json().catch(() => ({ error: "Erro desconhecido" }));
+        console.error("[EXPORT] Erro do servidor:", errorData);
+        throw new Error(errorData.error || errorData.details || "Erro na exportação");
       }
 
       const blob = await response.blob();
@@ -695,9 +714,10 @@ export default function Home() {
       });
     } catch (error) {
       console.error("Error exporting Excel:", error);
+      const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
       toast({
         title: "Erro na exportação",
-        description: "Não foi possível gerar o arquivo Excel.",
+        description: errorMessage,
         variant: "destructive",
       });
     }
