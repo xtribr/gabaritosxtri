@@ -228,7 +228,7 @@ export default function Home() {
   const studentsWithScores = useMemo(() => {
     if (answerKey.length === 0) return students;
     
-    return students.map(student => {
+    return students.map((student, index) => {
       let correctAnswers = 0;
       let wrongAnswers = 0;
       
@@ -250,10 +250,37 @@ export default function Home() {
         : 0;
       
       // Calcular acertos por área (LC, CH, CN, MT)
-      const areaCorrectAnswers: Record<string, number> = {};
+      // CRÍTICO: PRESERVAR TODOS os acertos já salvos (vindos do Python TRI)
+      // Não recalcular áreas que já têm acertos salvos, mesmo que não estejam no template atual
+      const existingAreaCorrectAnswers = student.areaCorrectAnswers || {};
+      const areaCorrectAnswers: Record<string, number> = { ...existingAreaCorrectAnswers }; // Copiar TODOS os existentes
+      
       const areas = getAreasByTemplate(selectedTemplate.name, numQuestions);
       
+      // Debug apenas para o primeiro aluno (usar índice, não studentsWithScores)
+      const isFirstStudent = index === 0;
+      if (isFirstStudent) {
+        console.log("🔍 [DEBUG studentsWithScores] ========================================");
+        console.log("🔍 [DEBUG studentsWithScores] Aluno:", student.id);
+        console.log("🔍 [DEBUG studentsWithScores] Template:", selectedTemplate.name);
+        console.log("🔍 [DEBUG studentsWithScores] Áreas do template:", areas);
+        console.log("🔍 [DEBUG studentsWithScores] Acertos EXISTENTES (TODOS):", existingAreaCorrectAnswers);
+      }
+      
+      // Calcular apenas para áreas do template atual que ainda não têm acertos salvos
+      // IMPORTANTE: Se uma área já tem acertos salvos, NÃO recalcular (mesmo que esteja no template)
       areas.forEach(({ area, start, end }) => {
+        // Se já tem acertos salvos para esta área, preservar (vindos do Python)
+        // NÃO recalcular mesmo que esteja no template atual
+        if (existingAreaCorrectAnswers[area] !== undefined && existingAreaCorrectAnswers[area] !== null) {
+          areaCorrectAnswers[area] = existingAreaCorrectAnswers[area];
+          if (isFirstStudent) {
+            console.log(`🔍 [DEBUG studentsWithScores] - Área ${area}: PRESERVANDO acertos existentes = ${existingAreaCorrectAnswers[area]}`);
+          }
+          return; // Preservar, não recalcular
+        }
+        
+        // Só calcular se não tiver acertos salvos
         let areaCorrect = 0;
         for (let i = start - 1; i < end && i < student.answers.length; i++) {
           if (i < answerKey.length && student.answers[i] != null && answerKey[i] != null) {
@@ -265,14 +292,22 @@ export default function Home() {
           }
         }
         areaCorrectAnswers[area] = areaCorrect;
+        if (isFirstStudent) {
+          console.log(`🔍 [DEBUG studentsWithScores] - Área ${area}: RECALCULADO = ${areaCorrect}`);
+        }
       });
+      
+      if (isFirstStudent) {
+        console.log("🔍 [DEBUG studentsWithScores] Acertos FINAIS (TODAS as áreas):", areaCorrectAnswers);
+        console.log("🔍 [DEBUG studentsWithScores] ========================================");
+      }
       
       return {
         ...student,
         score,
         correctAnswers,
         wrongAnswers,
-        areaCorrectAnswers, // Adicionar acertos por área
+        areaCorrectAnswers, // Preservar acertos existentes + calcular novos se necessário
         // IMPORTANTE: Preservar explicitamente areaScores (TCT) e triScore (TRI) se existirem
         areaScores: student.areaScores, // Notas TCT por área
         triScore: student.triScore, // Nota TRI geral
@@ -2057,13 +2092,32 @@ export default function Home() {
         gabarito[String(idx + 1)] = answer;
       });
 
-      // Configuração de áreas (padrão ENEM)
-      const areas_config = {
-        "Linguagens e Códigos": [1, 45],
-        "Ciências Humanas": [46, 90],
-        "Ciências da Natureza": [91, 135],
-        "Matemática": [136, 180],
+      // Configuração de áreas baseada EXCLUSIVAMENTE no template selecionado
+      // ENEM Dia 1: LC e CH
+      // ENEM Dia 2: CN e MT
+      // ENEM Completo: todas as 4 áreas
+      const areas = getAreasByTemplate(selectedTemplate.name, answerKeyToUse.length);
+      const areas_config: Record<string, [number, number]> = {};
+      
+      // Mapear áreas para nomes completos (como o Python espera)
+      const areaNames: Record<string, string> = {
+        'LC': 'Linguagens e Códigos',
+        'CH': 'Ciências Humanas',
+        'CN': 'Ciências da Natureza',
+        'MT': 'Matemática'
       };
+      
+      // Adicionar apenas as áreas retornadas pelo template
+      areas.forEach(({ area, start, end }) => {
+        const areaName = areaNames[area] || area;
+        areas_config[areaName] = [start, end];
+      });
+      
+      // Se não houver áreas definidas pelo template, usar padrão ENEM Dia 1
+      if (Object.keys(areas_config).length === 0) {
+        areas_config["Linguagens e Códigos"] = [1, 45];
+        areas_config["Ciências Humanas"] = [46, 90];
+      }
 
       console.log("[TRI V2] Enviando requisição:", {
         total_alunos: alunos.length,
@@ -2089,33 +2143,62 @@ export default function Home() {
       }
 
       const data = await response.json();
-      console.log("[TRI V2] Resultado recebido:", data);
+      console.log("🔍 [DEBUG TRI V2] ========================================");
+      console.log("🔍 [DEBUG TRI V2] Resultado recebido do Python:");
+      console.log("🔍 [DEBUG TRI V2] - Status:", data.status);
+      console.log("🔍 [DEBUG TRI V2] - Total resultados:", data.resultados?.length);
+      console.log("🔍 [DEBUG TRI V2] - Primeiro resultado:", data.resultados?.[0]);
+      console.log("🔍 [DEBUG TRI V2] - areas_config enviado:", areas_config);
 
       // Processar resultados
       if (data.status === "sucesso" && data.resultados) {
         setTriV2Results(data);
 
         // Converter resultados para o formato esperado pelo sistema
-        const triScoresMap = new Map<string, number>();
-        const triScoresByAreaMap = new Map<string, Record<string, number>>();
+        // IMPORTANTE: MERGEAR com dados existentes, não substituir completamente
+        console.log("🔍 [DEBUG TRI V2] Dados ANTES do merge:");
+        console.log("🔍 [DEBUG TRI V2] - triScores existentes:", Array.from(triScores.entries()).slice(0, 2));
+        console.log("🔍 [DEBUG TRI V2] - triScoresByArea existentes:", Array.from(triScoresByArea.entries()).slice(0, 2));
+        
+        const triScoresMap = new Map<string, number>(triScores); // Copiar dados existentes
+        const triScoresByAreaMap = new Map<string, Record<string, number>>(triScoresByArea); // Copiar dados existentes
+        const studentUpdates = new Map<string, Record<string, number>>(); // Armazenar atualizações de acertos
 
         data.resultados.forEach((resultado: any, index: number) => {
           const student = studentsWithScores[index];
           if (!student) return;
 
+          console.log(`🔍 [DEBUG TRI V2] Processando aluno ${index + 1}: ${student.id}`);
+          console.log(`🔍 [DEBUG TRI V2] - Resultado Python:`, {
+            tri_geral: resultado.tri_geral,
+            tri_lc: resultado.tri_lc,
+            tri_ch: resultado.tri_ch,
+            tri_cn: resultado.tri_cn,
+            tri_mt: resultado.tri_mt,
+            lc_acertos: resultado.lc_acertos,
+            ch_acertos: resultado.ch_acertos,
+            cn_acertos: resultado.cn_acertos,
+            mt_acertos: resultado.mt_acertos,
+          });
+
           // TRI total - Python retorna tri_geral diretamente (não tri_geral.tri_ajustado)
           const triTotal = resultado.tri_geral || 0;
           triScoresMap.set(student.id, triTotal);
 
-          // TRI por área - Python retorna tri_lc, tri_ch, tri_cn, tri_mt diretamente
-          const areaScores: Record<string, number> = {};
+          // TRI por área - MERGEAR com dados existentes, não substituir
+          const existingAreaScores = triScoresByAreaMap.get(student.id) || {};
+          console.log(`🔍 [DEBUG TRI V2] - TRI áreas EXISTENTES antes:`, existingAreaScores);
+          
+          const newAreaScores: Record<string, number> = { ...existingAreaScores }; // Copiar dados existentes
           
           // Verificar formato novo (direto: tri_lc, tri_ch, etc.)
           if (resultado.tri_lc !== undefined) {
-            areaScores.LC = resultado.tri_lc;
-            areaScores.CH = resultado.tri_ch || 0;
-            areaScores.CN = resultado.tri_cn || 0;
-            areaScores.MT = resultado.tri_mt || 0;
+            // Atualizar apenas as áreas que vieram no resultado (não zerar as outras)
+            // IMPORTANTE: Atualizar sempre, mesmo se for 0 (pode ser zero acertos)
+            if (resultado.tri_lc !== undefined) newAreaScores.LC = resultado.tri_lc;
+            if (resultado.tri_ch !== undefined) newAreaScores.CH = resultado.tri_ch;
+            if (resultado.tri_cn !== undefined) newAreaScores.CN = resultado.tri_cn;
+            if (resultado.tri_mt !== undefined) newAreaScores.MT = resultado.tri_mt;
           }
           // Verificar formato antigo (aninhado: areas.LC.tri.tri_ajustado)
           else if (resultado.areas) {
@@ -2129,13 +2212,51 @@ export default function Home() {
                   "Matemática": "MT",
                 };
                 const sigla = siglas[areaName] || areaName;
-                areaScores[sigla] = areaData.tri.tri_ajustado;
+                newAreaScores[sigla] = areaData.tri.tri_ajustado;
               }
             });
           }
           
-          triScoresByAreaMap.set(student.id, areaScores);
+          console.log(`🔍 [DEBUG TRI V2] - TRI áreas DEPOIS do merge:`, newAreaScores);
+          triScoresByAreaMap.set(student.id, newAreaScores);
+          
+          // IMPORTANTE: Salvar acertos retornados pelo Python e MERGEAR com existentes
+          // O Python retorna lc_acertos, ch_acertos, cn_acertos, mt_acertos
+          const existingAreaCorrectAnswers = student.areaCorrectAnswers || {};
+          console.log(`🔍 [DEBUG TRI V2] - Acertos EXISTENTES antes:`, existingAreaCorrectAnswers);
+          
+          const newAreaCorrectAnswers: Record<string, number> = { ...existingAreaCorrectAnswers };
+          
+          // Atualizar apenas as áreas que vieram no resultado (preservar as outras)
+          if (resultado.lc_acertos !== undefined) newAreaCorrectAnswers.LC = resultado.lc_acertos;
+          if (resultado.ch_acertos !== undefined) newAreaCorrectAnswers.CH = resultado.ch_acertos;
+          if (resultado.cn_acertos !== undefined) newAreaCorrectAnswers.CN = resultado.cn_acertos;
+          if (resultado.mt_acertos !== undefined) newAreaCorrectAnswers.MT = resultado.mt_acertos;
+          
+          console.log(`🔍 [DEBUG TRI V2] - Acertos DEPOIS do merge:`, newAreaCorrectAnswers);
+          
+          // Armazenar para atualizar todos de uma vez depois do forEach
+          studentUpdates.set(student.id, newAreaCorrectAnswers);
         });
+        
+        // Atualizar TODOS os alunos de uma vez (evita múltiplas atualizações de estado)
+        console.log("🔍 [DEBUG TRI V2] Atualizando estado students com acertos de", studentUpdates.size, "alunos");
+        setStudents(prev => {
+          const updated = prev.map(s => {
+            const newAcertos = studentUpdates.get(s.id);
+            if (newAcertos) {
+              return { ...s, areaCorrectAnswers: newAcertos };
+            }
+            return s;
+          });
+          console.log("🔍 [DEBUG TRI V2] Estado students atualizado. Primeiro aluno:", updated[0]?.areaCorrectAnswers);
+          return updated;
+        });
+        
+        console.log("🔍 [DEBUG TRI V2] Dados DEPOIS do merge:");
+        console.log("🔍 [DEBUG TRI V2] - triScoresMap final:", Array.from(triScoresMap.entries()).slice(0, 2));
+        console.log("🔍 [DEBUG TRI V2] - triScoresByAreaMap final:", Array.from(triScoresByAreaMap.entries()).slice(0, 2));
+        console.log("🔍 [DEBUG TRI V2] ========================================");
 
         setTriScores(triScoresMap);
         setTriScoresByArea(triScoresByAreaMap);
@@ -2342,6 +2463,46 @@ export default function Home() {
         finalTriScores.set(studentId, data.sum / data.count);
       }
     });
+    
+    // CRÍTICO: Salvar acertos por área no estado students
+    // Coletar acertos de cada área que foi calculada
+    const areaCorrectAnswersUpdates = new Map<string, Record<string, number>>();
+    
+    // Para cada área calculada, coletar os acertos dos alunos
+    for (const { area, start, end } of areas) {
+      studentsWithScores.forEach((student) => {
+        const existingAcertos = areaCorrectAnswersUpdates.get(student.id) || (student.areaCorrectAnswers ? { ...student.areaCorrectAnswers } : {});
+        
+        // Calcular acertos para esta área específica
+        let areaCorrect = 0;
+        for (let i = start - 1; i < end && i < student.answers.length; i++) {
+          if (i < answerKeyToUse.length && student.answers[i] != null && answerKeyToUse[i] != null) {
+            const normalizedAnswer = String(student.answers[i]).toUpperCase().trim();
+            const normalizedKey = String(answerKeyToUse[i]).toUpperCase().trim();
+            if (normalizedAnswer === normalizedKey) {
+              areaCorrect++;
+            }
+          }
+        }
+        existingAcertos[area] = areaCorrect;
+        areaCorrectAnswersUpdates.set(student.id, existingAcertos);
+      });
+    }
+    
+    // Atualizar estado students com os acertos (MERGEAR com existentes)
+    if (areaCorrectAnswersUpdates.size > 0) {
+      console.log("[TRI] Salvando acertos por área para", areaCorrectAnswersUpdates.size, "alunos");
+      console.log("[TRI] Primeiro aluno acertos:", Array.from(areaCorrectAnswersUpdates.entries())[0]);
+      setStudents(prev => prev.map(s => {
+        const newAcertos = areaCorrectAnswersUpdates.get(s.id);
+        if (newAcertos) {
+          // MERGEAR com acertos existentes (preservar outras áreas já calculadas)
+          const existingAcertos = s.areaCorrectAnswers || {};
+          return { ...s, areaCorrectAnswers: { ...existingAcertos, ...newAcertos } };
+        }
+        return s;
+      }));
+    }
     
     // Atualizar o estado do triScores
     // Criar um novo Map para forçar o React a detectar a mudança
@@ -3057,50 +3218,41 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
+    <div className="min-h-screen bg-background flex">
+      {/* Sidebar */}
+      <aside className="w-64 bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800 flex flex-col fixed left-0 top-0 h-screen z-40">
+        {/* Logo */}
+        <div className="p-6 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-md bg-purple-100 dark:bg-purple-900/30">
-              <FileSpreadsheet className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-500 via-purple-600 to-indigo-600 rounded-lg blur-sm opacity-75"></div>
+              <div className="relative p-2 rounded-lg bg-gradient-to-br from-purple-500 via-purple-600 to-indigo-600 shadow-lg shadow-purple-500/30">
+                <FileSpreadsheet className="h-5 w-5 text-white" />
+              </div>
             </div>
             <div className="flex flex-col">
-              <h1 className="text-xl font-semibold text-slate-800 dark:text-slate-100" data-testid="text-app-title">
+              <h2 className="text-lg font-extrabold bg-gradient-to-r from-slate-900 via-purple-800 to-slate-900 dark:from-slate-50 dark:via-purple-300 dark:to-slate-50 bg-clip-text text-transparent tracking-tight">
                 GabaritAI
-              </h1>
-              <p className="text-xs text-slate-600 dark:text-slate-400">Powered by X-TRI</p>
+              </h2>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Powered by X-TRI</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {mounted && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                    className="h-9 w-9"
-                    data-testid="button-theme-toggle"
-                  >
-                    {theme === "dark" ? (
-                      <Sun className="h-4 w-4" />
-                    ) : (
-                      <Moon className="h-4 w-4" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {theme === "dark" ? "Modo claro" : "Modo escuro"}
-                </TooltipContent>
-              </Tooltip>
-            )}
+        </div>
+
+        {/* Menu de Ações */}
+        <nav className="flex-1 overflow-y-auto p-4 space-y-2 flex flex-col">
+          <div className="space-y-2">
             {status === "completed" && students.length > 0 && (
               <>
                 <Dialog open={answerKeyDialogOpen} onOpenChange={setAnswerKeyDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button variant="outline" data-testid="button-answer-key">
-                      <ClipboardList className="h-4 w-4 mr-2" />
-                      Cadastrar Gabarito
+                    <Button 
+                      variant="outline" 
+                      className="w-full h-auto py-3 px-4 font-semibold border-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-400 dark:hover:border-slate-600 transition-all hover:shadow-md rounded-xl justify-start"
+                      data-testid="button-answer-key"
+                    >
+                      <ClipboardList className="h-5 w-5 mr-3 flex-shrink-0" />
+                      <span>Cadastrar Gabarito</span>
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -3372,13 +3524,22 @@ export default function Home() {
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
-                <Button onClick={handleExportExcel} data-testid="button-export-excel">
-                  <Download className="h-4 w-4 mr-2" />
-                  Exportar para Excel
+                <Button 
+                  onClick={handleExportExcel} 
+                  className="w-full h-auto py-3 px-4 font-semibold bg-gradient-to-r from-purple-600 via-purple-600 to-indigo-600 hover:from-purple-700 hover:via-purple-700 hover:to-indigo-700 text-white shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 transition-all hover:scale-[1.02] rounded-xl justify-start border-0"
+                  data-testid="button-export-excel"
+                >
+                  <Download className="h-5 w-5 mr-3 flex-shrink-0" />
+                  <span>Exportar para Excel</span>
                 </Button>
-                <Button onClick={handleExportScannedAnswers} variant="outline" data-testid="button-export-scanned">
-                  <FileSpreadsheet className="h-4 w-4 mr-2" />
-                  Exportar Gabaritos
+                <Button 
+                  onClick={handleExportScannedAnswers} 
+                  variant="outline" 
+                  className="w-full h-auto py-3 px-4 font-semibold border-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-400 dark:hover:border-slate-600 transition-all hover:shadow-md rounded-xl justify-start"
+                  data-testid="button-export-scanned"
+                >
+                  <FileSpreadsheet className="h-5 w-5 mr-3 flex-shrink-0" />
+                  <span>Exportar Gabaritos</span>
                 </Button>
               </>
             )}
@@ -3387,49 +3548,87 @@ export default function Home() {
                 <Button 
                   onClick={handleSalvarAplicacao} 
                   variant="default"
-                  className="bg-green-500 hover:bg-green-600 text-white shadow-sm"
+                  className="w-full h-auto py-3 px-4 font-semibold bg-gradient-to-r from-green-600 via-emerald-600 to-green-600 hover:from-green-700 hover:via-emerald-700 hover:to-green-700 text-white shadow-lg shadow-green-500/30 hover:shadow-xl hover:shadow-green-500/40 transition-all hover:scale-[1.02] rounded-xl justify-start border-0"
                   data-testid="button-save-application"
                 >
-                  <Save className="h-4 w-4 mr-2" />
-                  Salvar Aplicação
-                </Button>
-                <Button 
-                  onClick={handleSair} 
-                  variant="outline"
-                  data-testid="button-exit"
-                >
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Sair
+                  <Save className="h-5 w-5 mr-3 flex-shrink-0" />
+                  <span>Salvar Aplicação</span>
                 </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="outline" data-testid="button-clear-trigger">
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Limpar
+                    <Button 
+                      variant="outline" 
+                      className="w-full h-auto py-3 px-4 font-semibold border-2 border-red-200 dark:border-red-900/50 bg-white dark:bg-slate-900 hover:bg-red-50 dark:hover:bg-red-950/30 hover:border-red-400 dark:hover:border-red-800 text-red-600 dark:text-red-400 transition-all hover:shadow-md hover:shadow-red-200/50 dark:hover:shadow-red-900/20 hover:scale-[1.02] rounded-xl justify-start"
+                      data-testid="button-clear-trigger"
+                    >
+                      <Trash2 className="h-5 w-5 mr-3 flex-shrink-0" />
+                      <span>Limpar</span>
                     </Button>
                   </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Limpar todos os dados?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Esta ação irá remover o PDF carregado, gabarito e todos os dados processados.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel data-testid="button-cancel-clear">Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleClear} data-testid="button-confirm-clear">
-                      Confirmar
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Limpar todos os dados?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Esta ação irá remover o PDF carregado, gabarito e todos os dados processados.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel data-testid="button-cancel-clear">Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleClear} data-testid="button-confirm-clear">
+                        Confirmar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </>
             )}
           </div>
+          
+          {/* Botão Sair sempre no final */}
+          <div className="mt-auto pt-4 border-t border-slate-200 dark:border-slate-800">
+            <Button 
+              onClick={handleSair} 
+              variant="outline"
+              className="w-full h-auto py-3 px-4 font-semibold border-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-400 dark:hover:border-slate-600 transition-all hover:shadow-md rounded-xl justify-start"
+              data-testid="button-exit"
+            >
+              <LogOut className="h-5 w-5 mr-3 flex-shrink-0" />
+              <span>Sair</span>
+            </Button>
+          </div>
+        </nav>
+      </aside>
+
+      {/* Main Content */}
+      <div className="flex-1 ml-64 flex flex-col">
+      <header className="sticky top-0 z-50 border-b border-slate-200/80 dark:border-slate-800/80 bg-gradient-to-r from-white via-white to-slate-50/50 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900/50 backdrop-blur-xl supports-[backdrop-filter]:bg-white/90 dark:supports-[backdrop-filter]:bg-slate-950/90 shadow-lg shadow-slate-200/50 dark:shadow-slate-900/50">
+        <div className="max-w-full mx-auto px-8 py-4 flex items-center justify-end gap-4">
+          {mounted && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                  className="h-11 w-11 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-800 transition-all hover:scale-105 hover:shadow-md"
+                  data-testid="button-theme-toggle"
+                >
+                  {theme === "dark" ? (
+                    <Sun className="h-5 w-5 text-amber-500 dark:text-amber-400" />
+                  ) : (
+                    <Moon className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {theme === "dark" ? "Modo claro" : "Modo escuro"}
+              </TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="flex-1 max-w-full mx-auto px-6 py-8">
         {!file && !isBatchMode && status === "idle" && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Coluna Esquerda: Tabs de Processar/Gerar */}
@@ -4599,69 +4798,6 @@ export default function Home() {
 
               {/* ABA 3: ESTATISTICAS TRI */}
               <TabsContent value="tri" className="mt-4">
-                {/* Card de Controle TRI */}
-                <Card className="mb-4 border-purple-200 dark:border-purple-800">
-                  <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Target className="h-5 w-5 text-purple-600" />
-                      Cálculo TRI - Coerência Pedagógica
-                    </CardTitle>
-                    <CardDescription>
-                      Análise estatística avançada com detecção de padrões e coerência pedagógica
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {/* Descrição do Algoritmo */}
-                      <div className="bg-purple-50 dark:bg-purple-950/50 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
-                        <div className="space-y-2">
-                          <p className="font-semibold text-purple-600 dark:text-purple-400 flex items-center gap-2">
-                            <Target className="h-4 w-4" />
-                            Algoritmo TRI - Coerência Pedagógica
-                          </p>
-                          <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                            <li>Análise de coerência pedagógica avançada</li>
-                            <li>Detecção de padrão inverso (acerta difíceis, erra fáceis)</li>
-                            <li>Ajustes por concordância prova-aluno (±30%)</li>
-                            <li>Penalidades por inconsistência (-60 pts)</li>
-                            <li>Range TRI: 300-900 pontos</li>
-                          </ul>
-                        </div>
-                      </div>
-
-                      {/* Botão de Calcular */}
-                      <Button
-                        onClick={() => calculateTRIV2(answerKey)}
-                        disabled={triV2Loading || studentsWithScores.length === 0 || answerKey.length === 0}
-                        className="w-full bg-purple-600 hover:bg-purple-700"
-                        size="lg"
-                      >
-                        {triV2Loading ? (
-                          <>
-                            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                            Calculando TRI (Coerência Pedagógica)...
-                          </>
-                        ) : (
-                          <>
-                            <Target className="h-5 w-5 mr-2" />
-                            Calcular TRI V2 (Coerência Pedagógica)
-                          </>
-                        )}
-                      </Button>
-
-                      {/* Status */}
-                      {triScoresCount > 0 && (
-                        <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/50 rounded-lg p-3 border border-green-200 dark:border-green-800">
-                          <CheckCircle className="h-4 w-4" />
-                          <span>
-                            TRI calculado para {triScoresCount} alunos usando Coerência Pedagógica
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
                 {triScoresCount > 0 && triScores.size > 0 && (
                   <div className="space-y-4" data-testid="statistics-tri-grid">
                     {/* Card de Resumo TRI */}
@@ -5397,6 +5533,7 @@ export default function Home() {
           </div>
         )}
       </main>
+      </div>
     </div>
   );
 }

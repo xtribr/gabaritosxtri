@@ -408,46 +408,112 @@ class TRIProcessadorV2:
             alunos: Lista de dicionários com dados dos alunos
             gabarito: Dicionário com gabarito oficial
             areas_config: Configuração de áreas {'LC': [1, 45], 'CH': [46, 90], ...}
+                          ou {'Linguagens e Códigos': [1, 45], 'Ciências Humanas': [46, 90], ...}
         
         Returns:
             Tuple (prova_analysis, resultados)
         """
         resultados = []
         
-        for aluno in alunos:
-            # Contar acertos por área
+        # Mapear nomes de áreas para códigos padrão (LC, CH, CN, MT)
+        area_mapping = {
+            'LC': 'LC',
+            'Linguagens e Códigos': 'LC',
+            'Linguagens': 'LC',
+            'CH': 'CH',
+            'Ciências Humanas': 'CH',
+            'CN': 'CN',
+            'Ciências da Natureza': 'CN',
+            'MT': 'MT',
+            'Matemática': 'MT'
+        }
+        
+        # Normalizar areas_config para usar códigos padrão
+        # IMPORTANTE: Usar APENAS as áreas enviadas pelo frontend (baseado no template)
+        # O frontend SEMPRE envia o areas_config correto baseado no template selecionado
+        print("=" * 80)
+        print("🔍 [DEBUG PYTHON TRI] Recebido areas_config:", areas_config)
+        print("🔍 [DEBUG PYTHON TRI] Total alunos:", len(alunos))
+        print("🔍 [DEBUG PYTHON TRI] Total questões no gabarito:", len(gabarito))
+        
+        normalized_areas = {}
+        for area_name, range_config in areas_config.items():
+            # Tentar mapear o nome para código padrão
+            area_code = area_mapping.get(area_name, area_name)
+            if area_code in ['LC', 'CH', 'CN', 'MT']:
+                normalized_areas[area_code] = range_config
+                print(f"🔍 [DEBUG PYTHON TRI] Área mapeada: {area_name} -> {area_code} = {range_config}")
+        
+        print("🔍 [DEBUG PYTHON TRI] Áreas normalizadas:", normalized_areas)
+        
+        # Se não recebeu areas_config válido, é um ERRO - não assumir padrão
+        # O frontend sempre deve enviar o areas_config correto
+        if not normalized_areas:
+            raise ValueError(
+                f"areas_config inválido ou vazio. Recebido: {areas_config}. "
+                "O frontend deve sempre enviar areas_config baseado no template selecionado."
+            )
+        
+        for aluno_idx, aluno in enumerate(alunos):
+            if aluno_idx < 2:  # Log apenas para os 2 primeiros alunos
+                print(f"🔍 [DEBUG PYTHON TRI] Processando aluno {aluno_idx + 1}: {aluno.get('nome', 'Sem nome')}")
+            # Contar acertos por área usando areas_config
             lc_acertos = 0
             ch_acertos = 0
             cn_acertos = 0
             mt_acertos = 0
             
-            # LC: questões 1-45
-            for i in range(1, 46):
-                q_key = f'q{i}'
-                if q_key in aluno and str(i) in gabarito:
-                    if aluno[q_key] == gabarito[str(i)]:
-                        lc_acertos += 1
+            # LC: usar range do areas_config
+            if 'LC' in normalized_areas:
+                start, end = normalized_areas['LC']
+                if aluno_idx < 2:
+                    print(f"🔍 [DEBUG PYTHON TRI] - LC: range {start}-{end}")
+                for i in range(start, end + 1):
+                    q_key = f'q{i}'
+                    if q_key in aluno and str(i) in gabarito:
+                        if aluno[q_key] == gabarito[str(i)]:
+                            lc_acertos += 1
+                if aluno_idx < 2:
+                    print(f"🔍 [DEBUG PYTHON TRI] - LC: {lc_acertos} acertos")
             
-            # CH: questões 46-90
-            for i in range(46, 91):
-                q_key = f'q{i}'
-                if q_key in aluno and str(i) in gabarito:
-                    if aluno[q_key] == gabarito[str(i)]:
-                        ch_acertos += 1
+            # CH: usar range do areas_config
+            if 'CH' in normalized_areas:
+                start, end = normalized_areas['CH']
+                if aluno_idx < 2:
+                    print(f"🔍 [DEBUG PYTHON TRI] - CH: range {start}-{end}")
+                for i in range(start, end + 1):
+                    q_key = f'q{i}'
+                    if q_key in aluno and str(i) in gabarito:
+                        if aluno[q_key] == gabarito[str(i)]:
+                            ch_acertos += 1
+                if aluno_idx < 2:
+                    print(f"🔍 [DEBUG PYTHON TRI] - CH: {ch_acertos} acertos")
             
-            # CN: questões 1-45
-            for i in range(1, 46):
-                q_key = f'q{i}'
-                if q_key in aluno and str(i) in gabarito:
-                    if aluno[q_key] == gabarito[str(i)]:
-                        cn_acertos += 1
+            # CN: usar range do areas_config (CRÍTICO - estava usando 1-45 fixo!)
+            if 'CN' in normalized_areas:
+                start, end = normalized_areas['CN']
+                if aluno_idx < 2:
+                    print(f"🔍 [DEBUG PYTHON TRI] - CN: range {start}-{end}")
+                for i in range(start, end + 1):
+                    q_key = f'q{i}'
+                    if q_key in aluno and str(i) in gabarito:
+                        if aluno[q_key] == gabarito[str(i)]:
+                            cn_acertos += 1
+                if aluno_idx < 2:
+                    print(f"🔍 [DEBUG PYTHON TRI] - CN: {cn_acertos} acertos")
             
-            # MT: questões 46-90
-            for i in range(46, 91):
-                q_key = f'q{i}'
-                if q_key in aluno and str(i) in gabarito:
-                    if aluno[q_key] == gabarito[str(i)]:
-                        mt_acertos += 1
+            # MT: usar range do areas_config (CRÍTICO - estava usando 46-90 fixo!)
+            if 'MT' in normalized_areas:
+                start, end = normalized_areas['MT']
+                if aluno_idx < 2:
+                    print(f"🔍 [DEBUG PYTHON TRI] - MT: range {start}-{end}")
+                for i in range(start, end + 1):
+                    q_key = f'q{i}'
+                    if q_key in aluno and str(i) in gabarito:
+                        if aluno[q_key] == gabarito[str(i)]:
+                            mt_acertos += 1
+                if aluno_idx < 2:
+                    print(f"🔍 [DEBUG PYTHON TRI] - MT: {mt_acertos} acertos")
             
             # Processar aluno
             resultado_aluno = self.processar_aluno(
@@ -464,7 +530,17 @@ class TRIProcessadorV2:
             resultado_aluno['cn_acertos'] = cn_acertos
             resultado_aluno['mt_acertos'] = mt_acertos
             
+            if aluno_idx < 2:
+                print(f"🔍 [DEBUG PYTHON TRI] Resultado final aluno {aluno_idx + 1}:")
+                print(f"🔍 [DEBUG PYTHON TRI] - LC: {lc_acertos} acertos, TRI: {resultado_aluno.get('tri_lc', 'N/A')}")
+                print(f"🔍 [DEBUG PYTHON TRI] - CH: {ch_acertos} acertos, TRI: {resultado_aluno.get('tri_ch', 'N/A')}")
+                print(f"🔍 [DEBUG PYTHON TRI] - CN: {cn_acertos} acertos, TRI: {resultado_aluno.get('tri_cn', 'N/A')}")
+                print(f"🔍 [DEBUG PYTHON TRI] - MT: {mt_acertos} acertos, TRI: {resultado_aluno.get('tri_mt', 'N/A')}")
+            
             resultados.append(resultado_aluno)
+        
+        print("🔍 [DEBUG PYTHON TRI] Total resultados processados:", len(resultados))
+        print("=" * 80)
         
         # Análise da prova (estatísticas gerais)
         if resultados:
