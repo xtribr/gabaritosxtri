@@ -396,34 +396,40 @@ def process_omr_page(
 ) -> Dict:
     """
     Processa uma página usando template fixo (OpenCV).
+    OTIMIZADO: Reduzido logging verboso para melhor performance.
     """
     template = select_template(template_name)
     candidate = template_name.lower() if template_name else DEFAULT_TEMPLATE_NAME
     template_key = candidate if candidate in AVAILABLE_TEMPLATES else DEFAULT_TEMPLATE_NAME
     height, width = image.shape[:2]
-    logger.info(f"[OMR] Página {page_number}: {width}x{height}px | template={template_key} | debug={debug}")
+    # Log reduzido para performance
+    if debug:
+        logger.info(f"[OMR] Página {page_number}: {width}x{height}px | template={template_key}")
 
     working_image = image
     alignment_info = {"aligned": False}
     if align_marks and "registration_marks" in template:
-        logger.info(f"[OMR] Tentando alinhamento por marcadores...")
+        if debug:
+            logger.info(f"[OMR] Tentando alinhamento por marcadores...")
         aligned_img, info = align_with_registration_marks(image, template)
         alignment_info = info
         working_image = aligned_img
-        if info.get("aligned"):
-            logger.info(f"[OMR] ✅ Alinhamento aplicado: {info.get('marks')}")
-        else:
-            logger.warning(f"[OMR] ⚠️  Alinhamento falhou ({info.get('reason')})")
+        if info.get("aligned") and debug:
+            logger.info(f"[OMR] ✅ Alinhamento aplicado")
+        elif not info.get("aligned") and debug:
+            logger.warning(f"[OMR] ⚠️  Alinhamento falhou")
 
-    logger.info(f"[OMR] Pré-processando imagem...")
+    # Pré-processamento otimizado
     pil_img = Image.fromarray(working_image)
     bw_array = preprocess_pil_image(pil_img)
     
-    logger.info(f"[OMR] Detectando bolhas (OpenCV)...")
+    # Detecção de bolhas
     answers, debug_image = detect_bubbles_fixed(bw_array, template, debug=debug)
     
     detected_count = len([q for q in answers.values() if q != "Não respondeu"])
-    logger.info(f"[OMR] ✅ Página {page_number}: {detected_count}/{template['total_questions']} respostas marcadas")
+    # Log apenas resultado final (reduz verbosidade)
+    if debug or detected_count < template['total_questions'] * 0.8:
+        logger.info(f"[OMR] ✅ Página {page_number}: {detected_count}/{template['total_questions']} respostas marcadas")
 
     result = {
         "pagina": page_number,

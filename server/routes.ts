@@ -60,6 +60,7 @@ async function callPythonOMR(imageBuffer: Buffer, pageNumber: number): Promise<{
       `${PYTHON_OMR_SERVICE_URL}/api/process-image`,
       formData,
       {
+        timeout: 10000, // 10 segundos timeout (aumentado de padrão)
         headers: {
           ...formData.getHeaders(),
         },
@@ -1666,6 +1667,153 @@ IMPORTANTE:
       res.status(500).json({
         error: "Erro ao gerar análise com IA",
         details: error instanceof Error ? error.message : "Erro desconhecido",
+      });
+    }
+  });
+
+  // ============================================================================
+  // ENDPOINTS DE HISTÓRICO DE AVALIAÇÕES
+  // ============================================================================
+  
+  const AVALIACOES_FILE = path.join(process.cwd(), "data", "avaliacoes.json");
+  
+  // Garantir que o diretório existe
+  async function ensureAvaliacoesFile() {
+    const dir = path.dirname(AVALIACOES_FILE);
+    await fs.mkdir(dir, { recursive: true });
+    try {
+      await fs.access(AVALIACOES_FILE);
+    } catch {
+      // Arquivo não existe, criar com array vazio
+      await fs.writeFile(AVALIACOES_FILE, JSON.stringify([], null, 2), "utf-8");
+    }
+  }
+
+  // POST /api/avaliacoes - Salvar avaliação
+  app.post("/api/avaliacoes", async (req: Request, res: Response) => {
+    try {
+      await ensureAvaliacoesFile();
+      
+      const avaliacao = req.body;
+      
+      // Validar dados obrigatórios
+      if (!avaliacao.id || !avaliacao.data || !avaliacao.titulo) {
+        res.status(400).json({ error: "Dados obrigatórios faltando: id, data, titulo" });
+        return;
+      }
+
+      // Ler avaliações existentes
+      const content = await fs.readFile(AVALIACOES_FILE, "utf-8");
+      const avaliacoes: any[] = JSON.parse(content);
+
+      // Verificar se já existe (atualizar) ou adicionar nova
+      const index = avaliacoes.findIndex(a => a.id === avaliacao.id);
+      if (index >= 0) {
+        avaliacoes[index] = avaliacao;
+      } else {
+        avaliacoes.unshift(avaliacao); // Adicionar no início
+      }
+
+      // Manter apenas as últimas 100 avaliações
+      const avaliacoesLimitadas = avaliacoes.slice(0, 100);
+
+      // Salvar no arquivo
+      await fs.writeFile(AVALIACOES_FILE, JSON.stringify(avaliacoesLimitadas, null, 2), "utf-8");
+
+      console.log(`[AVALIACOES] Salva: ${avaliacao.id} - ${avaliacao.totalAlunos} alunos`);
+      
+      res.json({
+        success: true,
+        id: avaliacao.id,
+        total: avaliacoesLimitadas.length
+      });
+    } catch (error: any) {
+      console.error("[AVALIACOES] Erro ao salvar:", error);
+      res.status(500).json({
+        error: "Erro ao salvar avaliação",
+        details: error.message
+      });
+    }
+  });
+
+  // GET /api/avaliacoes - Listar todas as avaliações
+  app.get("/api/avaliacoes", async (req: Request, res: Response) => {
+    try {
+      await ensureAvaliacoesFile();
+      
+      const content = await fs.readFile(AVALIACOES_FILE, "utf-8");
+      const avaliacoes = JSON.parse(content);
+
+      res.json({
+        success: true,
+        avaliacoes,
+        total: avaliacoes.length
+      });
+    } catch (error: any) {
+      console.error("[AVALIACOES] Erro ao listar:", error);
+      res.status(500).json({
+        error: "Erro ao listar avaliações",
+        details: error.message
+      });
+    }
+  });
+
+  // GET /api/avaliacoes/:id - Buscar avaliação específica
+  app.get("/api/avaliacoes/:id", async (req: Request, res: Response) => {
+    try {
+      await ensureAvaliacoesFile();
+      
+      const { id } = req.params;
+      const content = await fs.readFile(AVALIACOES_FILE, "utf-8");
+      const avaliacoes: any[] = JSON.parse(content);
+      
+      const avaliacao = avaliacoes.find(a => a.id === id);
+      
+      if (!avaliacao) {
+        res.status(404).json({ error: "Avaliação não encontrada" });
+        return;
+      }
+
+      res.json({
+        success: true,
+        avaliacao
+      });
+    } catch (error: any) {
+      console.error("[AVALIACOES] Erro ao buscar:", error);
+      res.status(500).json({
+        error: "Erro ao buscar avaliação",
+        details: error.message
+      });
+    }
+  });
+
+  // DELETE /api/avaliacoes/:id - Deletar avaliação
+  app.delete("/api/avaliacoes/:id", async (req: Request, res: Response) => {
+    try {
+      await ensureAvaliacoesFile();
+      
+      const { id } = req.params;
+      const content = await fs.readFile(AVALIACOES_FILE, "utf-8");
+      const avaliacoes: any[] = JSON.parse(content);
+      
+      const index = avaliacoes.findIndex(a => a.id === id);
+      if (index < 0) {
+        res.status(404).json({ error: "Avaliação não encontrada" });
+        return;
+      }
+
+      avaliacoes.splice(index, 1);
+      await fs.writeFile(AVALIACOES_FILE, JSON.stringify(avaliacoes, null, 2), "utf-8");
+
+      res.json({
+        success: true,
+        message: "Avaliação deletada com sucesso"
+      });
+    } catch (error: any) {
+      console.error("[AVALIACOES] Erro ao deletar:", error);
+      res.status(500).json({
+        error: "Erro ao deletar avaliação",
+        details: error.message
       });
     }
   });

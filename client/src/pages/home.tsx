@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
-import { Upload, FileText, Download, Trash2, RefreshCw, CheckCircle, AlertCircle, Loader2, X, FileSpreadsheet, ClipboardList, Calculator, BarChart3, Plus, Minus, Info, HelpCircle, Users, FileUp, Eye, Moon, Sun, TrendingUp, Target, UserCheck } from "lucide-react";
+import { Upload, FileText, Download, Trash2, RefreshCw, CheckCircle, AlertCircle, Loader2, X, FileSpreadsheet, ClipboardList, Calculator, BarChart3, Plus, Minus, Info, HelpCircle, Users, FileUp, Eye, Moon, Sun, TrendingUp, Target, UserCheck, Calendar, History, Save, LogOut } from "lucide-react";
 import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, ScatterChart, Scatter, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, LineChart, Line } from "recharts";
 import { Button } from "@/components/ui/button";
@@ -71,6 +71,47 @@ export default function Home() {
   
   useEffect(() => {
     setMounted(true);
+    
+    // Carregar histórico do backend primeiro, com fallback para localStorage
+    const carregarHistorico = async () => {
+      try {
+        // Tentar buscar do backend
+        const response = await fetch('/api/avaliacoes');
+        if (response.ok) {
+          const result = await response.json();
+          if (result.avaliacoes && result.avaliacoes.length > 0) {
+            setHistoricoAvaliacoes(result.avaliacoes);
+            console.log('[Histórico] Carregado do backend:', result.avaliacoes.length, 'registros');
+            
+            // Sincronizar com localStorage como backup
+            try {
+              localStorage.setItem('historicoAvaliacoes', JSON.stringify(result.avaliacoes));
+            } catch (e) {
+              console.warn('Erro ao salvar no localStorage:', e);
+            }
+            return;
+          }
+        }
+      } catch (error) {
+        console.warn('[Histórico] Erro ao buscar do backend, usando localStorage:', error);
+      }
+      
+      // Fallback: carregar do localStorage
+      const historicoSalvo = localStorage.getItem('historicoAvaliacoes');
+      if (historicoSalvo) {
+        try {
+          const historico = JSON.parse(historicoSalvo);
+          setHistoricoAvaliacoes(historico);
+          console.log('[Histórico] Carregado do localStorage:', historico.length, 'registros');
+        } catch (e) {
+          console.error('Erro ao carregar histórico:', e);
+        }
+      } else {
+        console.log('[Histórico] Nenhum histórico encontrado');
+      }
+    };
+    
+    carregarHistorico();
   }, []);
   
   const [fileQueue, setFileQueue] = useState<QueuedFile[]>([]);
@@ -96,6 +137,28 @@ export default function Home() {
   const [mainActiveTab, setMainActiveTab] = useState<string>("alunos"); // Aba principal: alunos, gabarito, tri, tct, conteudos
   const [aiAnalysis, setAiAnalysis] = useState<string>(""); // Análise gerada pela IA
   const [aiAnalysisLoading, setAiAnalysisLoading] = useState<boolean>(false); // Loading da análise IA
+  
+  // Histórico de avaliações
+  interface AvaliacaoHistorico {
+    id: string;
+    data: string; // ISO date string
+    titulo: string;
+    mediaTRI: number;
+    totalAlunos: number;
+    template: string;
+    local?: string; // Ex: "RN"
+    // Dados completos para recarregar a aplicação
+    students?: StudentData[];
+    answerKey?: string[];
+    triScores?: Array<[string, number]>; // Array de [studentId, triScore]
+    triScoresByArea?: Array<[string, Record<string, number>]>; // Array de [studentId, {LC, CH, CN, MT}]
+    selectedTemplateIndex?: number;
+  }
+  
+  const [historicoAvaliacoes, setHistoricoAvaliacoes] = useState<AvaliacaoHistorico[]>([]);
+  const [avaliacaoSelecionada, setAvaliacaoSelecionada] = useState<AvaliacaoHistorico | null>(null);
+  const [avaliacaoCarregada, setAvaliacaoCarregada] = useState<string | null>(null); // ID da aplicação carregada
+  const [avaliacaoParaDeletar, setAvaliacaoParaDeletar] = useState<AvaliacaoHistorico | null>(null); // Avaliação que será deletada
   
   const [selectedTemplateIndex, setSelectedTemplateIndex] = useState<number>(6);
   const [customValidAnswers, setCustomValidAnswers] = useState<string>("A,B,C,D,E");
@@ -872,6 +935,54 @@ export default function Home() {
     }
   };
 
+  // Função para salvar aplicação manualmente
+  const handleSalvarAplicacao = () => {
+    if (students.length === 0) {
+      toast({
+        title: "Nenhum dado para salvar",
+        description: "Processe um PDF e calcule o TRI antes de salvar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (triScores.size === 0) {
+      toast({
+        title: "TRI não calculado",
+        description: "Calcule o TRI V2 antes de salvar a aplicação.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    salvarAvaliacaoNoHistorico();
+    
+    toast({
+      title: "Aplicação salva!",
+      description: "A avaliação foi salva no histórico e aparecerá na tela principal.",
+    });
+  };
+
+  // Função para sair sem limpar dados (volta para tela inicial)
+  const handleSair = () => {
+    // Apenas limpa o estado visual, mantém os dados salvos
+    setFile(null);
+    setFileQueue([]);
+    setIsBatchMode(false);
+    setPageCount(0);
+    setPagePreviews([]);
+    setStatus("idle");
+    setProgress(0);
+    setCurrentPage(0);
+    setErrorMessage("");
+    // NÃO limpa: students, answerKey, triScores, etc. (mantém para histórico)
+    
+    toast({
+      title: "Voltando para tela inicial",
+      description: "Os dados foram mantidos. Use 'Limpar' se quiser remover tudo.",
+    });
+  };
+
   const handleClear = () => {
     setFile(null);
     setFileQueue([]);
@@ -1100,6 +1211,219 @@ export default function Home() {
     });
   };
 
+  // Função para salvar avaliação no histórico (backend + localStorage)
+  const salvarAvaliacaoNoHistorico = useCallback(async () => {
+    // Usar os valores atuais do estado
+    const alunosAtuais = studentsWithScores;
+    const triScoresAtuais = triScores;
+    
+    if (alunosAtuais.length === 0 || triScoresAtuais.size === 0) {
+      console.log('[Histórico] Não há dados para salvar:', { alunos: alunosAtuais.length, tri: triScoresAtuais.size });
+      return;
+    }
+    
+    // Calcular média TRI
+    const triValues = Array.from(triScoresAtuais.values());
+    const mediaTRI = triValues.length > 0 
+      ? triValues.reduce((a, b) => a + b, 0) / triValues.length 
+      : 0;
+    
+    // Criar avaliação com dados completos
+    const avaliacao: AvaliacaoHistorico = {
+      id: `avaliacao-${Date.now()}`,
+      data: new Date().toISOString(),
+      titulo: `Análise de ${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}`,
+      mediaTRI: parseFloat(mediaTRI.toFixed(2)),
+      totalAlunos: alunosAtuais.length,
+      template: predefinedTemplates[selectedTemplateIndex]?.name || 'Personalizado',
+      local: 'RN', // Pode ser configurável no futuro
+      // Salvar dados completos para recarregar depois
+      students: alunosAtuais.map(s => ({
+        id: s.id,
+        studentNumber: s.studentNumber,
+        studentName: s.studentName,
+        answers: s.answers,
+        pageNumber: s.pageNumber,
+        turma: s.turma,
+        score: s.score,
+        correctAnswers: s.correctAnswers,
+        areaScores: s.areaScores
+      })),
+      answerKey: [...answerKey],
+      triScores: Array.from(triScoresAtuais.entries()),
+      triScoresByArea: Array.from(triScoresByArea.entries()),
+      selectedTemplateIndex: selectedTemplateIndex
+    };
+    
+    console.log('[Histórico] Salvando avaliação:', avaliacao);
+    
+    // Tentar salvar no backend primeiro
+    try {
+      const response = await fetch('/api/avaliacoes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(avaliacao),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Backend retornou ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('[Histórico] Salvo no backend:', result);
+    } catch (error) {
+      console.warn('[Histórico] Erro ao salvar no backend, usando localStorage:', error);
+      // Fallback para localStorage se backend falhar
+    }
+    
+    // Adicionar ao histórico local (manter últimos 50)
+    setHistoricoAvaliacoes(prev => {
+      // Verificar se já existe avaliação com mesmo ID (evitar duplicatas)
+      const existe = prev.some(a => a.id === avaliacao.id);
+      if (existe) {
+        console.log('[Histórico] Avaliação já existe, ignorando duplicata');
+        return prev;
+      }
+      
+      const novoHistorico = [avaliacao, ...prev].slice(0, 50);
+      
+      // Salvar no localStorage como backup
+      try {
+        localStorage.setItem('historicoAvaliacoes', JSON.stringify(novoHistorico));
+        console.log('[Histórico] Salvo no localStorage:', novoHistorico.length, 'registros');
+      } catch (e) {
+        console.error('Erro ao salvar histórico:', e);
+      }
+      
+      return novoHistorico;
+    });
+    
+    toast({
+      title: "Avaliação salva no histórico",
+      description: `Média TRI: ${avaliacao.mediaTRI.toFixed(2)} pontos`,
+    });
+  }, [studentsWithScores, triScores, triScoresByArea, answerKey, selectedTemplateIndex, toast]);
+
+  // Função para carregar aplicação do histórico
+  const carregarAplicacaoDoHistorico = async (avaliacao: AvaliacaoHistorico) => {
+    // Se não tem dados completos, tentar buscar do backend
+    if (!avaliacao.students || !avaliacao.answerKey) {
+      try {
+        console.log('[Histórico] Buscando dados completos do backend para:', avaliacao.id);
+        const response = await fetch(`/api/avaliacoes/${avaliacao.id}`);
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.avaliacao && result.avaliacao.students && result.avaliacao.answerKey) {
+            // Usar dados do backend
+            avaliacao = result.avaliacao;
+            console.log('[Histórico] Dados completos carregados do backend');
+          } else {
+            throw new Error('Dados incompletos no backend');
+          }
+        } else {
+          throw new Error(`Backend retornou ${response.status}`);
+        }
+      } catch (error) {
+        console.warn('[Histórico] Erro ao buscar do backend:', error);
+        toast({
+          title: "Dados incompletos",
+          description: "Esta avaliação não possui dados completos para recarregar. Ela foi salva antes da atualização do sistema.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
+    // Validar novamente após tentar buscar do backend
+    if (!avaliacao.students || !avaliacao.answerKey) {
+      toast({
+        title: "Dados incompletos",
+        description: "Esta avaliação não possui dados completos para recarregar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Restaurar dados
+    setStudents(avaliacao.students);
+    setAnswerKey(avaliacao.answerKey);
+    
+    // Restaurar TRI scores
+    if (avaliacao.triScores) {
+      const triMap = new Map<string, number>(avaliacao.triScores);
+      setTriScores(triMap);
+    }
+    
+    if (avaliacao.triScoresByArea) {
+      const triByAreaMap = new Map<string, Record<string, number>>(avaliacao.triScoresByArea);
+      setTriScoresByArea(triByAreaMap);
+    }
+    
+    // Restaurar template
+    if (avaliacao.selectedTemplateIndex !== undefined) {
+      setSelectedTemplateIndex(avaliacao.selectedTemplateIndex);
+    }
+    
+    // Marcar como carregada
+    setAvaliacaoCarregada(avaliacao.id);
+    setStatus("completed");
+    
+    toast({
+      title: "Aplicação carregada",
+      description: `${avaliacao.totalAlunos} alunos e dados TRI restaurados.`,
+    });
+  };
+
+  // Função para deletar avaliação do histórico
+  const deletarAvaliacao = async (avaliacao: AvaliacaoHistorico) => {
+    try {
+      // Deletar do backend
+      const response = await fetch(`/api/avaliacoes/${avaliacao.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok && response.status !== 404) {
+        // 404 é ok (já foi deletado ou não existe)
+        throw new Error(`Backend retornou ${response.status}`);
+      }
+
+      console.log('[Histórico] Deletado do backend:', avaliacao.id);
+    } catch (error) {
+      console.warn('[Histórico] Erro ao deletar do backend:', error);
+      // Continuar mesmo se backend falhar
+    }
+
+    // Remover do estado local
+    setHistoricoAvaliacoes(prev => {
+      const novo = prev.filter(a => a.id !== avaliacao.id);
+      
+      // Atualizar localStorage
+      try {
+        localStorage.setItem('historicoAvaliacoes', JSON.stringify(novo));
+      } catch (e) {
+        console.error('Erro ao atualizar localStorage:', e);
+      }
+      
+      return novo;
+    });
+
+    // Se a avaliação deletada estava carregada, limpar
+    if (avaliacaoCarregada === avaliacao.id) {
+      setAvaliacaoCarregada(null);
+      handleClear();
+    }
+
+    setAvaliacaoParaDeletar(null);
+    
+    toast({
+      title: "Avaliação deletada",
+      description: "A avaliação foi removida do histórico.",
+    });
+  };
+
   // Função para calcular TRI V2 (Coerência Pedagógica) via Python Service
   const calculateTRIV2 = async (currentAnswerKey?: string[]): Promise<void> => {
     const answerKeyToUse = currentAnswerKey || answerKey;
@@ -1225,6 +1549,18 @@ export default function Home() {
           title: "TRI V2 Calculado!",
           description: `${triScoresMap.size} alunos processados com sucesso usando Coerência Pedagógica`,
         });
+        
+        // Salvar no histórico se houver alunos processados
+        // Aguardar um pouco para garantir que os estados foram atualizados
+        setTimeout(() => {
+          if (triScoresMap.size > 0 && studentsWithScores.length > 0) {
+            console.log('[TRI V2] Salvando no histórico:', { 
+              alunos: studentsWithScores.length, 
+              triScores: triScoresMap.size 
+            });
+            salvarAvaliacaoNoHistorico();
+          }
+        }, 500);
 
         console.log("[TRI V2] Scores salvos:", {
           total: triScoresMap.size,
@@ -2162,23 +2498,13 @@ export default function Home() {
                 </TooltipContent>
               </Tooltip>
             )}
-            {students.length > 0 && (
-              <Badge variant="secondary" className="text-sm" data-testid="badge-student-count">
-                {students.length} aluno{students.length !== 1 ? "s" : ""}
-              </Badge>
-            )}
-            {answerKey.length > 0 && (
-              <Badge variant="outline" className="text-sm" data-testid="badge-answer-key">
-                Gabarito: {answerKey.length} questões
-              </Badge>
-            )}
             {status === "completed" && students.length > 0 && (
               <>
                 <Dialog open={answerKeyDialogOpen} onOpenChange={setAnswerKeyDialogOpen}>
                   <DialogTrigger asChild>
                     <Button variant="outline" data-testid="button-answer-key">
                       <ClipboardList className="h-4 w-4 mr-2" />
-                      {answerKey.length > 0 ? "Editar Gabarito" : "Inserir Gabarito"}
+                      {answerKey.length > 0 ? "Cadastrar Gabarito" : "Inserir Gabarito"}
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -2461,13 +2787,31 @@ export default function Home() {
               </>
             )}
             {(file || isBatchMode || students.length > 0) && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" data-testid="button-clear-trigger">
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Limpar
-                  </Button>
-                </AlertDialogTrigger>
+              <>
+                <Button 
+                  onClick={handleSalvarAplicacao} 
+                  variant="default"
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  data-testid="button-save-application"
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  Salvar Aplicação
+                </Button>
+                <Button 
+                  onClick={handleSair} 
+                  variant="outline"
+                  data-testid="button-exit"
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sair
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" data-testid="button-clear-trigger">
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Limpar
+                    </Button>
+                  </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>Limpar todos os dados?</AlertDialogTitle>
@@ -2483,6 +2827,7 @@ export default function Home() {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
+              </>
             )}
           </div>
         </div>
@@ -2490,8 +2835,10 @@ export default function Home() {
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         {!file && !isBatchMode && status === "idle" && (
-          <div className="space-y-6">
-            <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as "process" | "generate")} className="w-full">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Coluna Esquerda: Tabs de Processar/Gerar */}
+            <div className="lg:col-span-2 space-y-6">
+              <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as "process" | "generate")} className="w-full">
               <TabsList className="grid w-full max-w-lg mx-auto grid-cols-2">
                 <TabsTrigger value="process" data-testid="tab-process">
                   <Upload className="h-4 w-4 mr-2" />
@@ -2684,8 +3031,158 @@ export default function Home() {
                 </Card>
               </TabsContent>
             </Tabs>
+            </div>
+            
+            {/* Coluna Direita: Histórico de Avaliações */}
+            <div className="lg:col-span-1">
+              <Card className="bg-white dark:bg-card shadow-sm sticky top-6">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 border-b border-gray-200 dark:border-gray-800">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={async () => {
+                        try {
+                          // Buscar do backend primeiro
+                          const response = await fetch('/api/avaliacoes');
+                          if (response.ok) {
+                            const result = await response.json();
+                            if (result.avaliacoes) {
+                              setHistoricoAvaliacoes(result.avaliacoes);
+                              toast({
+                                title: "Histórico atualizado",
+                                description: `${result.avaliacoes.length} registros carregados do backend`,
+                              });
+                              return;
+                            }
+                          }
+                        } catch (error) {
+                          console.warn('Erro ao buscar do backend:', error);
+                        }
+                        
+                        // Fallback: localStorage
+                        const historicoSalvo = localStorage.getItem('historicoAvaliacoes');
+                        if (historicoSalvo) {
+                          try {
+                            setHistoricoAvaliacoes(JSON.parse(historicoSalvo));
+                            toast({
+                              title: "Histórico atualizado",
+                              description: "Histórico recarregado do cache local",
+                            });
+                          } catch (e) {
+                            console.error('Erro ao recarregar histórico:', e);
+                          }
+                        }
+                      }}
+                      className="h-8 w-8 text-gray-500 hover:text-gray-700 dark:text-muted-foreground dark:hover:text-foreground"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                    <CardTitle className="text-lg font-semibold text-gray-900 dark:text-foreground">Histórico de Avaliações</CardTitle>
+                  </div>
+                  <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-600 dark:bg-muted dark:text-muted-foreground">
+                    {historicoAvaliacoes.length} {historicoAvaliacoes.length === 1 ? 'registro' : 'registros'}
+                  </Badge>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  {historicoAvaliacoes.length > 0 ? (
+                    <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                      {historicoAvaliacoes.map((avaliacao, index) => {
+                        const dataFormatada = new Date(avaliacao.data).toLocaleDateString('pt-BR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric'
+                        });
+                        const tituloCompleto = `${index + 1} - ${avaliacao.titulo}${avaliacao.local ? ` (${avaliacao.local})` : ''}`;
+                        
+                        return (
+                          <div
+                            key={avaliacao.id}
+                            className={`flex items-center justify-between p-4 rounded-lg border transition-colors ${
+                              avaliacaoCarregada === avaliacao.id
+                                ? "bg-primary/10 border-primary dark:bg-primary/20"
+                                : "bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-muted/30"
+                            }`}
+                          >
+                            <div 
+                              className="flex-1 min-w-0 cursor-pointer"
+                              onClick={() => {
+                                carregarAplicacaoDoHistorico(avaliacao);
+                              }}
+                            >
+                              <h3 className="font-semibold text-base text-gray-900 dark:text-foreground mb-2 truncate">{tituloCompleto}</h3>
+                              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-muted-foreground">
+                                <Calendar className="h-3 w-3 flex-shrink-0" />
+                                <span>{dataFormatada}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 ml-4">
+                              <div className="flex flex-col items-end flex-shrink-0">
+                                <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                                  {avaliacao.mediaTRI.toFixed(1)}
+                                </div>
+                                <div className="text-xs text-gray-500 dark:text-muted-foreground uppercase mt-0.5">MÉDIA</div>
+                              </div>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setAvaliacaoParaDeletar(avaliacao);
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Deletar avaliação?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Esta ação não pode ser desfeita. A avaliação "{avaliacao.titulo}" será permanentemente removida do histórico.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel onClick={(e) => {
+                                      e.stopPropagation();
+                                      setAvaliacaoParaDeletar(null);
+                                    }}>
+                                      Cancelar
+                                    </AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (avaliacaoParaDeletar) {
+                                          deletarAvaliacao(avaliacaoParaDeletar);
+                                        }
+                                      }}
+                                      className="bg-red-600 hover:bg-red-700"
+                                    >
+                                      Deletar
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p className="text-sm">Nenhuma avaliação salva ainda.</p>
+                      <p className="text-xs mt-2">Processe um PDF e calcule o TRI V2 para criar o primeiro registro.</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </div>
         )}
+
 
         {/* Dialog for multiple PDF downloads */}
         <Dialog open={showDownloadDialog} onOpenChange={setShowDownloadDialog}>
