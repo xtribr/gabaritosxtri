@@ -971,6 +971,12 @@ export default function Home() {
     const triScoresMap = new Map<string, { sum: number; count: number }>();
     // IMPORTANTE: Preservar áreas já calculadas anteriormente
     const triScoresByAreaMap = new Map<string, Record<string, number>>(triScoresByArea); // Começa com o Map existente
+    
+    console.log("[TRI] ===== INICIANDO CÁLCULO =====");
+    console.log("[TRI] triScoresByArea (estado atual).size:", triScoresByArea.size);
+    console.log("[TRI] triScoresByArea entries:", Array.from(triScoresByArea.entries()));
+    console.log("[TRI] triScoresByAreaMap (inicializado).size:", triScoresByAreaMap.size);
+    console.log("[TRI] Áreas a calcular:", areas.map(a => a.area));
 
     for (const { area, start, end } of areas) {
       try {
@@ -1096,13 +1102,16 @@ export default function Home() {
     // Criar um novo Map para forçar o React a detectar a mudança
     const newTriScoresMap = new Map(finalTriScores);
     setTriScores(newTriScoresMap);
+    
+    console.log("[TRI] ===== ANTES DE SALVAR triScoresByArea =====");
+    console.log("[TRI] triScoresByAreaMap.size:", triScoresByAreaMap.size);
+    console.log("[TRI] triScoresByAreaMap entries:", Array.from(triScoresByAreaMap.entries()));
+    
     setTriScoresByArea(new Map(triScoresByAreaMap)); // Armazenar notas TRI por área
     setTriScoresCount(newTriScoresMap.size); // Atualizar contador para forçar re-render
     
     console.log("[TRI] Scores calculados:", newTriScoresMap.size, "alunos");
     console.log("[TRI] Detalhes dos scores:", Array.from(newTriScoresMap.entries()));
-    console.log("[TRI] triScoresByAreaMap size:", triScoresByAreaMap.size);
-    console.log("[TRI] triScoresByAreaMap detalhes:", Array.from(triScoresByAreaMap.entries()));
     
     // Se não há scores, logar detalhes para debug
     if (newTriScoresMap.size === 0) {
