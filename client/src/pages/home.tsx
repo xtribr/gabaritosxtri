@@ -2747,9 +2747,7 @@ export default function Home() {
                 </TabsTrigger>
                 <TabsTrigger 
                   value="tri" 
-                  data-testid="tab-tri" 
-                  disabled={triScoresCount === 0}
-                  className={triScoresCount === 0 ? "opacity-50 cursor-not-allowed" : ""}
+                  data-testid="tab-tri"
                 >
                   <BarChart3 className="h-4 w-4 mr-2" />
                   Estatísticas TRI {triScoresCount > 0 && `(${triScoresCount})`}
