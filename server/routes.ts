@@ -60,7 +60,7 @@ async function callPythonOMR(imageBuffer: Buffer, pageNumber: number): Promise<{
       `${PYTHON_OMR_SERVICE_URL}/api/process-image`,
       formData,
       {
-        timeout: 10000, // 10 segundos timeout (aumentado de padrão)
+        timeout: 15000, // 15 segundos timeout (aumentado para PDFs grandes)
         headers: {
           ...formData.getHeaders(),
         },
@@ -522,29 +522,31 @@ async function processPdfJob(jobId: string, pdfBuffer: Buffer, enableOcr: boolea
     const { promisify } = await import("util");
     const execAsync = promisify(exec);
 
-    for (let i = 0; i < pageCount; i++) {
-      const pageNumber = i + 1;
-      job.currentPage = pageNumber;
-      job.progress = Math.round((pageNumber / pageCount) * 100);
-      
-      console.log(`[JOB ${jobId}] Processando página ${pageNumber}/${pageCount}...`);
+    // Processar páginas em paralelo (máximo 3 por vez para não sobrecarregar)
+    const PARALLEL_PAGES = 3;
+    const processPage = async (pageIndex: number) => {
+      const pageNumber = pageIndex + 1;
       
       try {
         const singlePageDoc = await PDFDocument.create();
-        const [copiedPage] = await singlePageDoc.copyPages(pdfDoc, [i]);
+        const [copiedPage] = await singlePageDoc.copyPages(pdfDoc, [pageIndex]);
         singlePageDoc.addPage(copiedPage);
         const singlePagePdfBytes = await singlePageDoc.save();
 
         // Convert PDF to image
+        // Usar timestamp + pageNumber + jobId para evitar conflitos em processamento paralelo
         const timestamp = Date.now();
-        const tempPdfPath = `/tmp/page_${timestamp}_${pageNumber}.pdf`;
-        const tempPngPath = `/tmp/page_${timestamp}_${pageNumber}`;
+        const uniqueId = `${jobId.slice(0, 8)}_${pageNumber}_${timestamp}`;
+        const tempPdfPath = `/tmp/page_${uniqueId}.pdf`;
+        const tempPngPath = `/tmp/page_${uniqueId}`;
         await fs.writeFile(tempPdfPath, singlePagePdfBytes);
 
         try {
-          await execAsync(`pdftoppm -png -r 150 -singlefile "${tempPdfPath}" "${tempPngPath}"`);
+          // DPI reduzido para 120 para melhor performance (ainda mantém qualidade suficiente)
+          await execAsync(`pdftoppm -png -r 120 -singlefile "${tempPdfPath}" "${tempPngPath}"`);
         } catch {
-          const sharpImage = await sharp(Buffer.from(singlePagePdfBytes), { density: 150 }).png().toBuffer();
+          // Fallback: usar sharp com DPI reduzido
+          const sharpImage = await sharp(Buffer.from(singlePagePdfBytes), { density: 120 }).png().toBuffer();
           await fs.writeFile(`${tempPngPath}.png`, sharpImage);
         }
 
@@ -701,13 +703,35 @@ async function processPdfJob(jobId: string, pdfBuffer: Buffer, enableOcr: boolea
             : (omrResult.warnings.length > 0 ? omrResult.warnings.join("; ") : undefined),
         };
 
-        job.students.push(student);
-        if (omrResult.warnings.length > 0) {
-          job.warnings.push(...omrResult.warnings.slice(0, 5));
-        }
+        return { student, warnings: omrResult.warnings.slice(0, 5) };
       } catch (pageError) {
         console.error(`[JOB ${jobId}] Erro página ${pageNumber}:`, pageError);
-        job.warnings.push(`Erro na página ${pageNumber}`);
+        return { student: null, warnings: [`Erro na página ${pageNumber}`] };
+      }
+    };
+
+    // Processar páginas em lotes paralelos
+    for (let batchStart = 0; batchStart < pageCount; batchStart += PARALLEL_PAGES) {
+      const batchEnd = Math.min(batchStart + PARALLEL_PAGES, pageCount);
+      const batch = Array.from({ length: batchEnd - batchStart }, (_, i) => batchStart + i);
+      
+      // Atualizar progresso do lote
+      job.currentPage = batchEnd;
+      job.progress = Math.round((batchEnd / pageCount) * 100);
+      
+      console.log(`[JOB ${jobId}] Processando páginas ${batchStart + 1}-${batchEnd}/${pageCount} em paralelo...`);
+      
+      // Processar lote em paralelo
+      const results = await Promise.all(batch.map(processPage));
+      
+      // Adicionar resultados ao job
+      for (const result of results) {
+        if (result.student) {
+          job.students.push(result.student);
+        }
+        if (result.warnings.length > 0) {
+          job.warnings.push(...result.warnings);
+        }
       }
     }
 
@@ -1666,6 +1690,379 @@ IMPORTANTE:
       console.error("[Análise IA] Erro:", error);
       res.status(500).json({
         error: "Erro ao gerar análise com IA",
+        details: error instanceof Error ? error.message : "Erro desconhecido",
+      });
+    }
+  });
+
+  // ============================================================================
+  // ENDPOINT DE ANÁLISE ENEM/TRI COM ASSISTANT API
+  // ============================================================================
+  
+  app.post("/api/analise-enem-tri", async (req: Request, res: Response) => {
+    try {
+      const {
+        respostasAluno,
+        tri,
+        anoProva,
+        serie,
+        infoExtra,
+        nomeAluno,
+        matricula,
+        turma,
+        acertos,
+        erros,
+        nota,
+        triLc,
+        triCh,
+        triCn,
+        triMt,
+        triGeral,
+      } = req.body;
+
+      // Validar dados obrigatórios (tri pode ser triGeral)
+      const triValido = tri || triGeral;
+      if (!respostasAluno || !triValido || !anoProva) {
+        return res.status(400).json({
+          error: "Dados obrigatórios faltando",
+          details: "respostasAluno, tri (ou triGeral) e anoProva são obrigatórios.",
+          required: ["respostasAluno", "tri (ou triGeral)", "anoProva"],
+        });
+      }
+
+      const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+      const ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID;
+
+      if (!OPENAI_API_KEY) {
+        return res.status(500).json({
+          error: "OPENAI_API_KEY não configurada. Configure nas variáveis de ambiente.",
+        });
+      }
+
+      if (!ASSISTANT_ID) {
+        return res.status(500).json({
+          error: "OPENAI_ASSISTANT_ID não configurada. Configure nas variáveis de ambiente.",
+          details: "Você precisa configurar o ID do seu Assistant. Exemplo: export OPENAI_ASSISTANT_ID='asst_...'",
+        });
+      }
+
+      // Preparar mensagem do usuário com dados do aluno
+      const dadosAluno: any = {
+        nome: nomeAluno || "Aluno",
+        matricula: matricula || "N/A",
+        turma: turma || "N/A",
+        serie: serie || "N/A",
+        anoProva: anoProva,
+        respostas: respostasAluno,
+        acertos: acertos || 0,
+        erros: erros || 0,
+        nota: nota || 0,
+        tri: {
+          geral: triGeral || tri || 0,
+          lc: triLc || 0,
+          ch: triCh || 0,
+          cn: triCn || 0,
+          mt: triMt || 0,
+        },
+        infoExtra: infoExtra || {},
+      };
+
+      // Se infoExtra contém dados de múltiplos alunos, incluir na mensagem
+      if (infoExtra?.totalAlunos) {
+        dadosAluno.turmaCompleta = {
+          totalAlunos: infoExtra.totalAlunos,
+          mediaTRI: infoExtra.mediaTRI,
+          mediasPorArea: infoExtra.mediasPorArea,
+        };
+      }
+
+      // Verificar se é análise de turma completa ou aluno individual
+      const isTurmaCompleta = dadosAluno.turmaCompleta && dadosAluno.turmaCompleta.totalAlunos > 1;
+      const isAnaliseCoerencia = infoExtra?.coerenciaPedagogica;
+      
+      let mensagemUsuario = `Você é um especialista em análise de desempenho no ENEM usando a Teoria de Resposta ao Item (TRI). 
+
+${isTurmaCompleta 
+  ? `Analise os seguintes dados da TURMA COMPLETA para o ENEM ${anoProva}:`
+  : `Analise os seguintes dados do aluno para o ENEM ${anoProva}:`}
+
+**Dados ${isTurmaCompleta ? 'da Turma' : 'do Aluno'}:**
+- ${isTurmaCompleta ? 'Turma' : 'Nome'}: ${dadosAluno.nome}
+- Matrícula: ${dadosAluno.matricula}
+- Turma: ${dadosAluno.turma}
+- Série: ${dadosAluno.serie}
+${isTurmaCompleta ? `- Total de Alunos: ${dadosAluno.turmaCompleta.totalAlunos}` : ''}
+
+**NOTAS TRI (Teoria de Resposta ao Item) - MÉTRICA PRINCIPAL:**
+A TRI é a métrica oficial do ENEM. A escala vai de 0 a 1000, onde:
+- Abaixo de 400: Desempenho muito abaixo da média
+- 400-500: Desempenho abaixo da média
+- 500-600: Desempenho na média
+- 600-700: Desempenho acima da média
+- 700-800: Desempenho muito acima da média
+- Acima de 800: Desempenho excepcional
+
+**Notas TRI ${isTurmaCompleta ? 'Médias da Turma' : 'do Aluno'}:**
+- **TRI Geral:** ${dadosAluno.tri.geral.toFixed(2)}
+- **Linguagens e Códigos (LC):** ${dadosAluno.tri.lc.toFixed(2)}
+- **Ciências Humanas (CH):** ${dadosAluno.tri.ch.toFixed(2)}
+- **Ciências da Natureza (CN):** ${dadosAluno.tri.cn.toFixed(2)}
+- **Matemática (MT):** ${dadosAluno.tri.mt.toFixed(2)}
+
+${dadosAluno.acertos !== undefined ? `**Informações Complementares:**
+- Acertos médios: ${dadosAluno.acertos}
+- Erros médios: ${dadosAluno.erros || 'N/A'}
+- Nota TCT média: ${dadosAluno.nota ? dadosAluno.nota.toFixed(2) : 'N/A'}` : ''}
+
+${infoExtra && !isTurmaCompleta ? `**Informações Adicionais:**\n${JSON.stringify(infoExtra, null, 2)}` : ""}
+
+**IMPORTANTE:** 
+- Foque sua análise PRINCIPALMENTE nas notas TRI, que são a métrica oficial do ENEM
+- Compare as notas TRI de cada área com a escala de referência (0-1000)
+- Identifique quais áreas estão abaixo, na média ou acima da média baseado nas notas TRI
+- Forneça recomendações de estudo baseadas nas notas TRI de cada área
+- Se houver pedido específico sobre o que estudar, baseie-se nas notas TRI para priorizar conteúdos
+${isTurmaCompleta ? '- Como é uma análise de turma, forneça recomendações pedagógicas para o grupo como um todo, identificando padrões e áreas que precisam de reforço coletivo' : ''}
+
+${isAnaliseCoerencia ? `
+**COERÊNCIA PEDAGÓGICA (Análise de Erros por Dificuldade):**
+- Erros em questões FÁCEIS (>70% acerto): ${infoExtra.coerenciaPedagogica.errosFacil}
+- Erros em questões MÉDIAS (40-70% acerto): ${infoExtra.coerenciaPedagogica.errosMedia}
+- Erros em questões DIFÍCEIS (<40% acerto): ${infoExtra.coerenciaPedagogica.errosDificil}
+
+**IMPORTANTE:** Analise as NOTAS TRI deste aluno e forneça sugestões práticas de melhoria baseadas em CONTEÚDOS ENEM. 
+
+Sua resposta DEVE incluir OBRIGATORIAMENTE:
+
+1. **RESUMO DAS 4 NOTAS TRI:**
+   - Mostre claramente as notas TRI de cada área: LC, CH, CN e MT
+   - Indique qual área está abaixo da média, na média ou acima da média
+
+2. **ANÁLISE POR ÁREA:**
+   - Para cada área com TRI abaixo de 500, identifique os pontos fracos
+   - Explique o que essas notas TRI indicam sobre o desempenho do aluno
+
+3. **CONTEÚDOS ESPECÍFICOS DO ENEM PARA MELHORAR:**
+   - Liste CONTEÚDOS ESPECÍFICOS do ENEM que o aluno deve estudar para cada área com TRI baixa
+   - Seja específico: mencione habilidades, competências ou temas do ENEM
+   - Priorize conteúdos que terão maior impacto na elevação das notas TRI
+   - Exemplos: "H1 - Interpretar textos", "H15 - Funções", "H21 - Análise de gráficos", etc.
+
+4. **PLANO DE AÇÃO:**
+   - Sugira uma ordem de prioridade para os estudos
+   - Indique quais áreas devem ser priorizadas primeiro
+
+Seja detalhado e específico. Não resuma demais - o aluno precisa ver todas as 4 notas TRI e os conteúdos específicos para melhorar!` : `
+Por favor, forneça uma análise detalhada e estratégica ${isTurmaCompleta ? 'do desempenho desta turma' : 'do desempenho deste aluno'} no ENEM baseada nas NOTAS TRI, incluindo:
+1. Interpretação das notas TRI de cada área
+2. Comparação com a escala de referência TRI
+3. Pontos fortes e áreas de melhoria baseados nas notas TRI
+4. Recomendações específicas de estudo priorizadas pelas notas TRI mais baixas
+${isTurmaCompleta ? '5. Ações pedagógicas coletivas para melhorar o desempenho da turma' : ''}`}`;
+
+      // Criar thread no Assistant API
+      const threadResponse = await fetch("https://api.openai.com/v1/threads", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+          "OpenAI-Beta": "assistants=v2",
+        },
+      });
+
+      if (!threadResponse.ok) {
+        const error = await threadResponse.json();
+        throw new Error(`Erro ao criar thread: ${JSON.stringify(error)}`);
+      }
+
+      const threadData = await threadResponse.json();
+      const threadId = threadData.id;
+
+      // Adicionar mensagem do usuário à thread
+      const messageResponse = await fetch(
+        `https://api.openai.com/v1/threads/${threadId}/messages`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${OPENAI_API_KEY}`,
+            "Content-Type": "application/json",
+            "OpenAI-Beta": "assistants=v2",
+          },
+          body: JSON.stringify({
+            role: "user",
+            content: mensagemUsuario,
+          }),
+        }
+      );
+
+      if (!messageResponse.ok) {
+        const error = await messageResponse.json();
+        throw new Error(`Erro ao adicionar mensagem: ${JSON.stringify(error)}`);
+      }
+
+      // Executar o run do Assistant
+      const runResponse = await fetch(
+        `https://api.openai.com/v1/threads/${threadId}/runs`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${OPENAI_API_KEY}`,
+            "Content-Type": "application/json",
+            "OpenAI-Beta": "assistants=v2",
+          },
+          body: JSON.stringify({
+            assistant_id: ASSISTANT_ID,
+          }),
+        }
+      );
+
+      if (!runResponse.ok) {
+        const error = await runResponse.json();
+        const errorMsg = error.error?.message || JSON.stringify(error);
+        
+        // Mensagem mais clara para erro de Assistant não encontrado
+        if (errorMsg.includes("No assistant found")) {
+          throw new Error(
+            `Assistant ID não encontrado: ${ASSISTANT_ID}\n` +
+            `Verifique se o ID está correto e se o Assistant existe na sua conta OpenAI.\n` +
+            `Acesse: https://platform.openai.com/assistants para verificar.`
+          );
+        }
+        
+        throw new Error(`Erro ao executar run: ${errorMsg}`);
+      }
+
+      const runData = await runResponse.json();
+      let runId = runData.id;
+      let runStatus = runData.status;
+
+      // Aguardar conclusão do run (polling)
+      const maxAttempts = 60; // 60 tentativas = ~60 segundos
+      let attempts = 0;
+
+      while (runStatus === "queued" || runStatus === "in_progress") {
+        if (attempts >= maxAttempts) {
+          throw new Error("Timeout aguardando resposta do Assistant");
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 1000)); // Aguardar 1 segundo
+
+        const statusResponse = await fetch(
+          `https://api.openai.com/v1/threads/${threadId}/runs/${runId}`,
+          {
+            headers: {
+              "Authorization": `Bearer ${OPENAI_API_KEY}`,
+              "OpenAI-Beta": "assistants=v2",
+            },
+          }
+        );
+
+        if (!statusResponse.ok) {
+          const error = await statusResponse.json();
+          throw new Error(`Erro ao verificar status: ${JSON.stringify(error)}`);
+        }
+
+        const statusData = await statusResponse.json();
+        runStatus = statusData.status;
+        attempts++;
+
+        if (runStatus === "failed" || runStatus === "cancelled") {
+          throw new Error(`Run falhou com status: ${runStatus}`);
+        }
+      }
+
+      // Buscar mensagens da thread
+      const messagesResponse = await fetch(
+        `https://api.openai.com/v1/threads/${threadId}/messages`,
+        {
+          headers: {
+            "Authorization": `Bearer ${OPENAI_API_KEY}`,
+            "OpenAI-Beta": "assistants=v2",
+          },
+        }
+      );
+
+      if (!messagesResponse.ok) {
+        const error = await messagesResponse.json();
+        throw new Error(`Erro ao buscar mensagens: ${JSON.stringify(error)}`);
+      }
+
+      const messagesData = await messagesResponse.json();
+      
+      // Encontrar a última mensagem do assistant
+      const assistantMessages = messagesData.data
+        .filter((msg: any) => msg.role === "assistant")
+        .sort((a: any, b: any) => b.created_at - a.created_at);
+
+      if (assistantMessages.length === 0) {
+        throw new Error("Nenhuma resposta do Assistant encontrada");
+      }
+
+      const lastMessage = assistantMessages[0];
+      let analiseTexto = "";
+
+      // Extrair texto da mensagem (pode ser texto ou array de content blocks)
+      if (lastMessage.content) {
+        if (Array.isArray(lastMessage.content)) {
+          analiseTexto = lastMessage.content
+            .map((block: any) => {
+              if (block.type === "text") {
+                // Suportar diferentes estruturas
+                if (block.text && typeof block.text.value === "string") {
+                  return block.text.value;
+                } else if (typeof block.text === "string") {
+                  return block.text;
+                } else if (typeof block === "string") {
+                  return block;
+                }
+              }
+              return "";
+            })
+            .filter((text: string) => text.trim().length > 0)
+            .join("\n\n");
+        } else if (typeof lastMessage.content === "string") {
+          analiseTexto = lastMessage.content;
+        } else if (lastMessage.content.text) {
+          analiseTexto = typeof lastMessage.content.text === "string"
+            ? lastMessage.content.text
+            : lastMessage.content.text.value || "";
+        }
+      }
+      
+      // Se ainda não encontrou, tentar outros campos
+      if (!analiseTexto && lastMessage.text) {
+        analiseTexto = typeof lastMessage.text === "string"
+          ? lastMessage.text
+          : lastMessage.text.value || "";
+      }
+      
+      // Log para debug se não encontrar
+      if (!analiseTexto || analiseTexto.trim().length === 0) {
+        console.error("[Analise ENEM TRI] Estrutura da mensagem:", JSON.stringify(lastMessage, null, 2));
+      }
+
+      // Retornar análise (usar 'analysis' para compatibilidade com frontend)
+      if (!analiseTexto || analiseTexto.trim().length === 0) {
+        throw new Error("Resposta da IA não contém análise");
+      }
+      
+      res.json({
+        success: true,
+        analysis: analiseTexto.trim(), // Frontend espera 'analysis'
+        analise: analiseTexto.trim(), // Manter compatibilidade
+        threadId: threadId,
+        runId: runId,
+        dadosProcessados: {
+          nomeAluno: dadosAluno.nome,
+          anoProva: dadosAluno.anoProva,
+          triGeral: dadosAluno.tri.geral,
+        },
+      });
+
+    } catch (error) {
+      console.error("[Análise ENEM/TRI] Erro:", error);
+      res.status(500).json({
+        error: "Erro ao gerar análise com Assistant",
         details: error instanceof Error ? error.message : "Erro desconhecido",
       });
     }

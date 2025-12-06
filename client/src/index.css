@@ -9,10 +9,10 @@
   --opaque-button-border-intensity: -8;
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
-  --background: 210 3% 98%;
-  --foreground: 210 6% 12%;
-  --border: 210 3% 92%;
-  --card: 210 3% 96%;
+  --background: 0 0% 100%; /* Branco puro */
+  --foreground: 220 13% 18%; /* Azul escuro para textos */
+  --border: 220 13% 91%; /* Cinza claro para bordas */
+  --card: 0 0% 100%; /* Branco para cards */
   --card-foreground: 210 6% 12%;
   --card-border: 210 3% 90%;
   --sidebar: 210 3% 94%;
@@ -26,8 +26,8 @@
   --popover: 210 4% 92%;
   --popover-foreground: 210 6% 12%;
   --popover-border: 210 4% 86%;
-  --primary: 217 91% 48%;
-  --primary-foreground: 217 91% 98%;
+  --primary: 262 83% 58%; /* Roxo vibrante como no outro site */
+  --primary-foreground: 0 0% 100%;
   --secondary: 210 5% 86%;
   --secondary-foreground: 210 6% 12%;
   --muted: 210 5% 88%;
@@ -38,11 +38,11 @@
   --destructive-foreground: 0 84% 98%;
   --input: 210 5% 75%;
   --ring: 217 91% 48%;
-  --chart-1: 217 91% 42%;
-  --chart-2: 195 77% 38%;
-  --chart-3: 142 76% 36%;
-  --chart-4: 43 96% 42%;
-  --chart-5: 27 87% 45%;
+  --chart-1: 262 83% 58%; /* Roxo */
+  --chart-2: 217 91% 60%; /* Azul */
+  --chart-3: 142 71% 45%; /* Verde */
+  --chart-4: 25 95% 53%; /* Laranja */
+  --chart-5: 0 84% 60%; /* Vermelho */
   --font-sans: Inter, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: Menlo, monospace;
@@ -110,8 +110,8 @@
   --popover: 210 4% 14%;
   --popover-foreground: 210 4% 96%;
   --popover-border: 210 4% 20%;
-  --primary: 217 91% 48%;
-  --primary-foreground: 217 91% 98%;
+  --primary: 262 83% 58%; /* Roxo vibrante como no outro site */
+  --primary-foreground: 0 0% 100%;
   --secondary: 210 5% 18%;
   --secondary-foreground: 210 4% 96%;
   --muted: 210 5% 16%;

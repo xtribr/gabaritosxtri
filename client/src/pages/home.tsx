@@ -1,7 +1,9 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
-import { Upload, FileText, Download, Trash2, RefreshCw, CheckCircle, AlertCircle, Loader2, X, FileSpreadsheet, ClipboardList, Calculator, BarChart3, Plus, Minus, Info, HelpCircle, Users, FileUp, Eye, Moon, Sun, TrendingUp, Target, UserCheck, Calendar, History, Save, LogOut } from "lucide-react";
+import { Upload, FileText, Download, Trash2, RefreshCw, CheckCircle, AlertCircle, Loader2, X, FileSpreadsheet, ClipboardList, Calculator, BarChart3, Plus, Minus, Info, HelpCircle, Users, FileUp, Eye, Moon, Sun, TrendingUp, Target, UserCheck, Calendar, History, Save, LogOut, Trophy, Lightbulb, Award, BookOpen, Zap, Brain } from "lucide-react";
 import * as XLSX from "xlsx";
+import * as pdfjsLib from "pdfjs-dist";
+import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, ScatterChart, Scatter, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, LineChart, Line } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -137,6 +139,7 @@ export default function Home() {
   const [mainActiveTab, setMainActiveTab] = useState<string>("alunos"); // Aba principal: alunos, gabarito, tri, tct, conteudos
   const [aiAnalysis, setAiAnalysis] = useState<string>(""); // Análise gerada pela IA
   const [aiAnalysisLoading, setAiAnalysisLoading] = useState<boolean>(false); // Loading da análise IA
+  const [studentAnalyses, setStudentAnalyses] = useState<Map<string, { loading: boolean; analysis: string | null }>>(new Map()); // Análises individuais por aluno
   
   // Histórico de avaliações
   interface AvaliacaoHistorico {
@@ -480,53 +483,79 @@ export default function Home() {
     ].filter(d => d.value > 0);
   }, [studentsWithScores]);
 
+  // Configurar worker do PDF.js uma vez
+  useEffect(() => {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+  }, []);
+
   const loadPdfPreview = async (pdfFile: File) => {
-    console.log("[FRONTEND] Iniciando carregamento do PDF:", pdfFile.name, `(${(pdfFile.size / 1024 / 1024).toFixed(2)}MB)`);
-    
-    console.log("[FRONTEND] Importando PDF.js...");
-    const pdfjsLib = await import("pdfjs-dist");
-    console.log("[FRONTEND] PDF.js versão:", pdfjsLib.version);
-    
-    console.log("[FRONTEND] Importando worker...");
-    const pdfjsWorker = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
-    console.log("[FRONTEND] Worker URL:", pdfjsWorker.default);
-    
-    // Configure worker
-    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker.default;
-
-    console.log("[FRONTEND] Lendo arquivo...");
-    const arrayBuffer = await pdfFile.arrayBuffer();
-    console.log("[FRONTEND] ArrayBuffer criado, tamanho:", arrayBuffer.byteLength);
-    
-    console.log("[FRONTEND] Criando documento PDF...");
-    const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
-    const pdf = await loadingTask.promise;
-    const numPages = pdf.numPages;
-    console.log("[FRONTEND] PDF carregado com", numPages, "páginas");
-
-    const previews: PagePreview[] = [];
-    for (let i = 1; i <= Math.min(numPages, 8); i++) {
-      const page = await pdf.getPage(i);
-      const scale = 0.3;
-      const viewport = page.getViewport({ scale });
-      const canvas = document.createElement("canvas");
-      const context = canvas.getContext("2d");
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
-
-      if (context) {
-        await page.render({
-          canvasContext: context,
-          viewport: viewport,
-          canvas: canvas,
-        } as any).promise;
-        previews.push({
-          pageNumber: i,
-          imageUrl: canvas.toDataURL("image/jpeg", 0.7),
-        });
+    try {
+      console.log("[FRONTEND] Iniciando carregamento do PDF:", pdfFile.name, `(${(pdfFile.size / 1024 / 1024).toFixed(2)}MB)`);
+      
+      if (!pdfFile || pdfFile.size === 0) {
+        throw new Error("Arquivo PDF inválido ou vazio");
       }
+      
+      console.log("[FRONTEND] PDF.js versão:", pdfjsLib.version);
+
+      console.log("[FRONTEND] Lendo arquivo...");
+      const arrayBuffer = await pdfFile.arrayBuffer();
+      console.log("[FRONTEND] ArrayBuffer criado, tamanho:", arrayBuffer.byteLength);
+      
+      if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+        throw new Error("Arquivo PDF está vazio ou corrompido");
+      }
+      
+      console.log("[FRONTEND] Criando documento PDF...");
+      const loadingTask = pdfjsLib.getDocument({ 
+        data: new Uint8Array(arrayBuffer),
+        verbosity: 0 // Reduzir logs
+      });
+      const pdf = await loadingTask.promise;
+      const numPages = pdf.numPages;
+      console.log("[FRONTEND] PDF carregado com", numPages, "páginas");
+
+      if (numPages === 0) {
+        throw new Error("PDF não contém páginas válidas");
+      }
+
+      const previews: PagePreview[] = [];
+      for (let i = 1; i <= Math.min(numPages, 8); i++) {
+        try {
+          const page = await pdf.getPage(i);
+          const scale = 0.3;
+          const viewport = page.getViewport({ scale });
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
+          
+          if (!context) {
+            console.warn(`[FRONTEND] Não foi possível obter contexto do canvas para página ${i}`);
+            continue;
+          }
+          
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+
+          await page.render({
+            canvasContext: context,
+            viewport: viewport,
+          } as any).promise;
+          
+          previews.push({
+            pageNumber: i,
+            imageUrl: canvas.toDataURL("image/jpeg", 0.7),
+          });
+        } catch (pageError) {
+          console.error(`[FRONTEND] Erro ao processar página ${i}:`, pageError);
+          // Continua com as outras páginas
+        }
+      }
+      
+      return { numPages, previews };
+    } catch (error) {
+      console.error("[FRONTEND] Erro ao carregar PDF:", error);
+      throw error;
     }
-    return { numPages, previews };
   };
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -592,17 +621,26 @@ export default function Home() {
 
       try {
         const { numPages, previews } = await loadPdfPreview(pdfFile);
+        if (numPages === 0) {
+          throw new Error("PDF não contém páginas válidas");
+        }
         setPageCount(numPages);
         setPagePreviews(previews);
         setStatus("idle");
         setProgress(100);
+        setErrorMessage(""); // Limpar mensagem de erro anterior
       } catch (error) {
         console.error("Error loading PDF:", error);
         setStatus("error");
-        setErrorMessage("Erro ao carregar o PDF. Por favor, tente novamente.");
+        const errorMessage = error instanceof Error 
+          ? error.message 
+          : "Erro ao carregar o PDF. Por favor, tente novamente.";
+        setErrorMessage(errorMessage);
+        setPageCount(0);
+        setPagePreviews([]);
         toast({
           title: "Erro ao carregar PDF",
-          description: "Não foi possível processar o arquivo.",
+          description: error instanceof Error ? error.message : "Não foi possível processar o arquivo.",
           variant: "destructive",
         });
       }
@@ -727,39 +765,107 @@ export default function Home() {
 
     setAiAnalysisLoading(true);
     try {
-      // Converter Maps para objetos serializáveis
-      const triScoresObj = Object.fromEntries(Array.from(triScores.entries()));
-      const triScoresByAreaObj = Object.fromEntries(
-        Array.from(triScoresByArea.entries()).map(([studentId, areaScores]) => [
-          studentId,
-          areaScores
-        ])
-      );
+      // Calcular médias e estatísticas agregadas da turma
+      const triScoresArray = Array.from(triScores.values());
+      const triGeral = triScoresArray.length > 0 
+        ? triScoresArray.reduce((a, b) => a + b, 0) / triScoresArray.length 
+        : 0;
 
-      const response = await fetch("/api/analyze-performance", {
+      // Calcular médias por área
+      const areas = ['LC', 'CH', 'CN', 'MT'];
+      const triByArea: Record<string, number> = {};
+      let totalAcertos = 0;
+      let totalErros = 0;
+      let totalNota = 0;
+
+      areas.forEach(area => {
+        const scores = Array.from(triScoresByArea.values())
+          .map(scores => scores[area])
+          .filter(score => typeof score === 'number' && score > 0);
+        
+        if (scores.length > 0) {
+          triByArea[area] = scores.reduce((a, b) => a + b, 0) / scores.length;
+        } else {
+          triByArea[area] = 0;
+        }
+      });
+
+      // Calcular acertos/erros totais
+      students.forEach(student => {
+        if (answerKey.length > 0 && student.answers) {
+          const correct = student.answers.filter((ans, idx) => 
+            idx < answerKey.length && ans && answerKey[idx] && 
+            String(ans).toUpperCase().trim() === String(answerKey[idx]).toUpperCase().trim()
+          ).length;
+          totalAcertos += correct;
+          totalErros += (answerKey.length - correct);
+          totalNota += (correct / answerKey.length) * 1000;
+        }
+      });
+
+      // Obter ano da prova do template selecionado (assumindo que está no template)
+      const anoProva = selectedTemplate?.ano || new Date().getFullYear() - 1; // Default: ano anterior
+
+      // Preparar respostas agregadas (primeiro aluno como exemplo, ou média)
+      const respostasAluno = students.length > 0 && students[0].answers 
+        ? students[0].answers 
+        : [];
+
+      // Preparar dados para enviar à nova rota
+      const payload = {
+        respostasAluno: respostasAluno,
+        tri: triGeral,
+        triGeral: triGeral,
+        triLc: triByArea['LC'] || 0,
+        triCh: triByArea['CH'] || 0,
+        triCn: triByArea['CN'] || 0,
+        triMt: triByArea['MT'] || 0,
+        anoProva: anoProva,
+        serie: "Ensino Médio", // Pode ser ajustado
+        nomeAluno: `Turma - ${students.length} alunos`,
+        matricula: "N/A",
+        turma: "Turma Completa",
+        acertos: Math.round(totalAcertos / students.length),
+        erros: Math.round(totalErros / students.length),
+        nota: students.length > 0 ? totalNota / students.length : 0,
+        infoExtra: {
+          totalAlunos: students.length,
+          triScores: Object.fromEntries(Array.from(triScores.entries())),
+          triScoresByArea: Object.fromEntries(
+            Array.from(triScoresByArea.entries()).map(([studentId, areaScores]) => [
+              studentId,
+              areaScores
+            ])
+          ),
+          mediaTRI: triGeral,
+          mediasPorArea: triByArea,
+        }
+      };
+
+      const response = await fetch("/api/analise-enem-tri", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ 
-          students,
-          triScores: triScoresObj,
-          triScoresByArea: triScoresByAreaObj,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: "Erro desconhecido" }));
-        throw new Error(errorData.error || "Erro ao gerar análise");
+        throw new Error(errorData.error || errorData.details || "Erro ao gerar análise");
       }
 
       const data = await response.json();
-      setAiAnalysis(data.analysis);
-
-      toast({
-        title: "Análise gerada!",
-        description: "A análise pedagógica foi criada com sucesso.",
-      });
+      
+      if (data.analysis) {
+        setAiAnalysis(data.analysis);
+        toast({
+          title: "Análise gerada!",
+          description: "A análise pedagógica foi criada com sucesso pela IA.",
+        });
+      } else {
+        throw new Error("Resposta da IA não contém análise");
+      }
     } catch (error) {
       console.error("Error generating AI analysis:", error);
       const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
@@ -770,6 +876,496 @@ export default function Home() {
       });
     } finally {
       setAiAnalysisLoading(false);
+    }
+  };
+
+  // Analisar perfil individual do aluno (coerência pedagógica)
+  const handleAnalyzeStudentProfile = async (student: StudentData, index: number) => {
+    // Verificar se o aluno tem TRI calculado
+    const studentTri = triScores.get(student.id);
+    const studentTriByArea = triScoresByArea.get(student.id);
+    
+    if (!studentTri && !studentTriByArea) {
+      toast({
+        title: "TRI não calculado",
+        description: "Calcule a TRI deste aluno primeiro.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Atualizar estado de loading
+    setStudentAnalyses(prev => {
+      const newMap = new Map(prev);
+      newMap.set(student.id, { loading: true, analysis: null });
+      return newMap;
+    });
+
+    try {
+      // Calcular coerência pedagógica (fácil, média, difícil)
+      const questionStats = statistics?.questionStats || [];
+      let errosFacil = 0, errosMedia = 0, errosDificil = 0;
+      let totalFacil = 0, totalMedia = 0, totalDificil = 0;
+
+      student.answers.forEach((answer, qIndex) => {
+        if (qIndex >= answerKey.length) return;
+        
+        const questionStat = questionStats[qIndex];
+        if (!questionStat) return;
+
+        const correctPercentage = questionStat.correctPercentage;
+        const isCorrect = answer && answer.toUpperCase().trim() === answerKey[qIndex].toUpperCase().trim();
+        
+        // Classificar dificuldade: fácil (>70%), média (40-70%), difícil (<40%)
+        if (correctPercentage >= 70) {
+          totalFacil++;
+          if (!isCorrect) errosFacil++;
+        } else if (correctPercentage >= 40) {
+          totalMedia++;
+          if (!isCorrect) errosMedia++;
+        } else {
+          totalDificil++;
+          if (!isCorrect) errosDificil++;
+        }
+      });
+
+      const percentErrosFacil = totalFacil > 0 ? Math.round((errosFacil / totalFacil) * 100) : 0;
+      const percentErrosMedia = totalMedia > 0 ? Math.round((errosMedia / totalMedia) * 100) : 0;
+      const percentErrosDificil = totalDificil > 0 ? Math.round((errosDificil / totalDificil) * 100) : 0;
+
+      // Calcular acertos/erros
+      let acertos = 0, erros = 0;
+      student.answers.forEach((answer, qIndex) => {
+        if (qIndex < answerKey.length && answer) {
+          if (answer.toUpperCase().trim() === answerKey[qIndex].toUpperCase().trim()) {
+            acertos++;
+          } else {
+            erros++;
+          }
+        }
+      });
+
+      const nota = answerKey.length > 0 ? (acertos / answerKey.length) * 1000 : 0;
+      const anoProva = selectedTemplate?.ano || new Date().getFullYear() - 1;
+
+      // Preparar payload para análise individual
+      const payload = {
+        respostasAluno: student.answers,
+        tri: studentTri || 0,
+        triGeral: studentTri || 0,
+        triLc: studentTriByArea?.LC || 0,
+        triCh: studentTriByArea?.CH || 0,
+        triCn: studentTriByArea?.CN || 0,
+        triMt: studentTriByArea?.MT || 0,
+        anoProva: anoProva,
+        serie: "Ensino Médio",
+        nomeAluno: student.studentName,
+        matricula: student.studentNumber,
+        turma: student.turma || "N/A",
+        acertos: acertos,
+        erros: erros,
+        nota: nota,
+        infoExtra: {
+          coerenciaPedagogica: {
+            errosFacil: `${percentErrosFacil}%`,
+            errosMedia: `${percentErrosMedia}%`,
+            errosDificil: `${percentErrosDificil}%`,
+            totalFacil: totalFacil,
+            totalMedia: totalMedia,
+            totalDificil: totalDificil,
+          }
+        }
+      };
+
+      const response = await fetch("/api/analise-enem-tri", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Erro desconhecido" }));
+        throw new Error(errorData.error || errorData.details || "Erro ao gerar análise");
+      }
+
+      const data = await response.json();
+      
+      if (data.analysis) {
+        // Mostrar análise completa (sem cortar)
+        const analysisText = data.analysis;
+        
+        setStudentAnalyses(prev => {
+          const newMap = new Map(prev);
+          newMap.set(student.id, { loading: false, analysis: analysisText });
+          return newMap;
+        });
+      } else {
+        throw new Error("Resposta da IA não contém análise");
+      }
+    } catch (error) {
+      console.error("Error analyzing student profile:", error);
+      const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
+      toast({
+        title: "Erro",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      setStudentAnalyses(prev => {
+        const newMap = new Map(prev);
+        newMap.set(student.id, { loading: false, analysis: null });
+        return newMap;
+      });
+    }
+  };
+
+  // Função para remover emojis e caracteres Unicode não suportados
+  const removeUnsupportedChars = (text: string): string => {
+    // Remove emojis e caracteres Unicode não suportados pelo WinAnsi
+    // Mantém apenas caracteres ASCII e alguns caracteres especiais comuns
+    return text
+      .replace(/[\u{1F300}-\u{1F9FF}]/gu, '') // Emojis
+      .replace(/[\u{1F600}-\u{1F64F}]/gu, '') // Emoticons
+      .replace(/[\u{1F680}-\u{1F6FF}]/gu, '') // Transporte e símbolos
+      .replace(/[\u{2600}-\u{26FF}]/gu, '') // Símbolos diversos
+      .replace(/[\u{2700}-\u{27BF}]/gu, '') // Dingbats
+      .replace(/[\u{1F900}-\u{1F9FF}]/gu, '') // Suplemento de emojis
+      .replace(/[\u{1FA00}-\u{1FAFF}]/gu, '') // Extensão de emojis
+      .replace(/[^\x00-\x7F]/g, (char) => {
+        // Substitui caracteres acentuados por versões sem acento quando possível
+        const map: Record<string, string> = {
+          'á': 'a', 'à': 'a', 'ã': 'a', 'â': 'a', 'ä': 'a',
+          'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
+          'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i',
+          'ó': 'o', 'ò': 'o', 'õ': 'o', 'ô': 'o', 'ö': 'o',
+          'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u',
+          'ç': 'c', 'ñ': 'n',
+          'Á': 'A', 'À': 'A', 'Ã': 'A', 'Â': 'A', 'Ä': 'A',
+          'É': 'E', 'È': 'E', 'Ê': 'E', 'Ë': 'E',
+          'Í': 'I', 'Ì': 'I', 'Î': 'I', 'Ï': 'I',
+          'Ó': 'O', 'Ò': 'O', 'Õ': 'O', 'Ô': 'O', 'Ö': 'O',
+          'Ú': 'U', 'Ù': 'U', 'Û': 'U', 'Ü': 'U',
+          'Ç': 'C', 'Ñ': 'N',
+        };
+        return map[char] || '';
+      })
+      .trim();
+  };
+
+  // Gerar PDF da análise individual do aluno
+  const handleGenerateAnalysisPDF = async (student: StudentData, analysis: string) => {
+    try {
+      const { PDFDocument, rgb, StandardFonts } = await import("pdf-lib");
+      const pdfDoc = await PDFDocument.create();
+      
+      // Fontes
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      
+      // Cores
+      const orangeColor = rgb(0.9569, 0.6471, 0.3765); // #f4a55e (laranja)
+      const darkColor = rgb(0.2, 0.2, 0.2);
+      const grayColor = rgb(0.5, 0.5, 0.5);
+      
+      // Adicionar página
+      const page = pdfDoc.addPage([595, 842]); // A4
+      const { width, height } = page.getSize();
+      
+      let yPosition = height - 50;
+      const margin = 50;
+      const lineHeight = 14;
+      const titleSize = 16;
+      const subtitleSize = 12;
+      const textSize = 10;
+      
+      // Cabeçalho
+      page.drawText("CorrigeAI", {
+        x: margin,
+        y: yPosition,
+        size: titleSize,
+        font: fontBold,
+        color: orangeColor,
+      });
+      
+      page.drawText("powered by XTRI", {
+        x: margin + 80,
+        y: yPosition,
+        size: 10,
+        font: font,
+        color: grayColor,
+      });
+      
+      yPosition -= 30;
+      
+      // Linha separadora
+      page.drawLine({
+        start: { x: margin, y: yPosition },
+        end: { x: width - margin, y: yPosition },
+        thickness: 1,
+        color: grayColor,
+      });
+      
+      yPosition -= 20;
+      
+      // Informações do aluno
+      page.drawText(`Aluno: ${student.studentName}`, {
+        x: margin,
+        y: yPosition,
+        size: subtitleSize,
+        font: fontBold,
+        color: darkColor,
+      });
+      
+      yPosition -= lineHeight;
+      
+      page.drawText(`Matrícula: ${student.studentNumber}`, {
+        x: margin,
+        y: yPosition,
+        size: textSize,
+        font: font,
+        color: darkColor,
+      });
+      
+      yPosition -= lineHeight;
+      
+      if (student.turma) {
+        page.drawText(`Turma: ${student.turma}`, {
+          x: margin,
+          y: yPosition,
+          size: textSize,
+          font: font,
+          color: darkColor,
+        });
+        yPosition -= lineHeight;
+      }
+      
+      // Notas TRI
+      const studentTri = triScores.get(student.id);
+      const studentTriByArea = triScoresByArea.get(student.id);
+      
+      if (studentTri || studentTriByArea) {
+        yPosition -= 10;
+        page.drawText("Notas TRI:", {
+          x: margin,
+          y: yPosition,
+          size: subtitleSize,
+          font: fontBold,
+          color: darkColor,
+        });
+        yPosition -= lineHeight;
+        
+        if (studentTri) {
+          page.drawText(`TRI Geral: ${studentTri.toFixed(2)}`, {
+            x: margin + 20,
+            y: yPosition,
+            size: textSize,
+            font: font,
+            color: darkColor,
+          });
+          yPosition -= lineHeight;
+        }
+        
+        if (studentTriByArea) {
+          const areas = [
+            { key: 'LC', name: 'Linguagens e Códigos' },
+            { key: 'CH', name: 'Ciências Humanas' },
+            { key: 'CN', name: 'Ciências da Natureza' },
+            { key: 'MT', name: 'Matemática' },
+          ];
+          
+          areas.forEach(area => {
+            const score = studentTriByArea[area.key];
+            if (score) {
+              page.drawText(`${area.name}: ${score.toFixed(2)}`, {
+                x: margin + 20,
+                y: yPosition,
+                size: textSize,
+                font: font,
+                color: darkColor,
+              });
+              yPosition -= lineHeight;
+            }
+          });
+        }
+      }
+      
+      yPosition -= 15;
+      
+      // Linha separadora
+      page.drawLine({
+        start: { x: margin, y: yPosition },
+        end: { x: width - margin, y: yPosition },
+        thickness: 1,
+        color: grayColor,
+      });
+      
+      yPosition -= 20;
+      
+      // Análise formatada
+      const analysisLines = analysis.split('\n');
+      let currentY = yPosition;
+      let currentPage = page;
+      
+      const drawTextOnPage = (text: string, x: number, y: number, options: { size?: number; font?: any; color?: any; bold?: boolean } = {}) => {
+        const finalFont = options.bold ? fontBold : (options.font || font);
+        const finalSize = options.size || textSize;
+        const finalColor = options.color || darkColor;
+        
+        // Remover caracteres não suportados antes de desenhar
+        const cleanText = removeUnsupportedChars(text);
+        
+        if (cleanText) {
+          currentPage.drawText(cleanText, {
+            x,
+            y,
+            size: finalSize,
+            font: finalFont,
+            color: finalColor,
+          });
+        }
+      };
+      
+      for (const line of analysisLines) {
+        // Verificar se precisa de nova página
+        if (currentY < margin + 50) {
+          currentPage = pdfDoc.addPage([595, 842]);
+          currentY = height - 50;
+        }
+        
+        // Formatar linha
+        if (line.startsWith('## ')) {
+          // Título principal
+          const titleText = removeUnsupportedChars(line.replace('## ', ''));
+          drawTextOnPage(titleText, margin, currentY, {
+            size: subtitleSize,
+            bold: true,
+            color: orangeColor,
+          });
+          currentY -= lineHeight + 5;
+        } else if (line.startsWith('### ')) {
+          // Subtítulo
+          const subtitleText = removeUnsupportedChars(line.replace('### ', ''));
+          drawTextOnPage(subtitleText, margin + 10, currentY, {
+            size: textSize + 1,
+            bold: true,
+          });
+          currentY -= lineHeight + 3;
+        } else if (line.trim().startsWith('- ')) {
+          // Lista - usar bullet simples ASCII
+          drawTextOnPage('-', margin + 10, currentY);
+          
+          // Remover negrito temporariamente para calcular largura
+          let text = line.replace(/^\s*-\s*/, '').replace(/\*\*/g, '');
+          text = removeUnsupportedChars(text);
+          const maxWidth = width - margin * 2 - 20;
+          
+          // Quebrar texto se necessário
+          const words = text.split(' ');
+          let currentLine = '';
+          let xPos = margin + 20;
+          
+          for (const word of words) {
+            const testLine = currentLine ? `${currentLine} ${word}` : word;
+            const textWidth = font.widthOfTextAtSize(testLine, textSize);
+            
+            if (textWidth > maxWidth && currentLine) {
+              drawTextOnPage(currentLine, xPos, currentY);
+              currentY -= lineHeight;
+              currentLine = word;
+              
+              if (currentY < margin + 50) {
+                currentPage = pdfDoc.addPage([595, 842]);
+                currentY = height - 50;
+                xPos = margin + 20;
+              }
+            } else {
+              currentLine = testLine;
+            }
+          }
+          
+          if (currentLine) {
+            drawTextOnPage(currentLine, xPos, currentY);
+            currentY -= lineHeight;
+          }
+        } else if (line.trim()) {
+          // Texto normal
+          let text = line.replace(/\*\*/g, '');
+          text = removeUnsupportedChars(text);
+          const maxWidth = width - margin * 2;
+          
+          // Quebrar texto longo
+          const words = text.split(' ');
+          let currentLine = '';
+          
+          for (const word of words) {
+            const testLine = currentLine ? `${currentLine} ${word}` : word;
+            const textWidth = font.widthOfTextAtSize(testLine, textSize);
+            
+            if (textWidth > maxWidth && currentLine) {
+              drawTextOnPage(currentLine, margin, currentY);
+              currentY -= lineHeight;
+              currentLine = word;
+              
+              if (currentY < margin + 50) {
+                currentPage = pdfDoc.addPage([595, 842]);
+                currentY = height - 50;
+              }
+            } else {
+              currentLine = testLine;
+            }
+          }
+          
+          if (currentLine) {
+            drawTextOnPage(currentLine, margin, currentY);
+            currentY -= lineHeight;
+          }
+        } else {
+          // Linha vazia
+          currentY -= lineHeight / 2;
+        }
+        
+        if (currentY < margin + 50) {
+          currentPage = pdfDoc.addPage([595, 842]);
+          currentY = height - 50;
+        }
+      }
+      
+      // Rodapé em todas as páginas
+      const allPages = pdfDoc.getPages();
+      allPages.forEach((pdfPage, index) => {
+        pdfPage.drawText(`CorrigeAI - powered by XTRI | Página ${index + 1} de ${allPages.length}`, {
+          x: margin,
+          y: 30,
+          size: 8,
+          font: font,
+          color: grayColor,
+        });
+      });
+      
+      // Salvar PDF
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Analise_${student.studentName.replace(/\s+/g, '_')}_${student.studentNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      toast({
+        title: "PDF gerado!",
+        description: `Análise de ${student.studentName} salva com sucesso.`,
+      });
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      toast({
+        title: "Erro ao gerar PDF",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      });
     }
   };
 
@@ -2465,14 +3061,14 @@ export default function Home() {
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-md bg-primary/10">
-              <FileSpreadsheet className="h-6 w-6 text-primary" />
+            <div className="p-2 rounded-md bg-purple-100 dark:bg-purple-900/30">
+              <FileSpreadsheet className="h-6 w-6 text-purple-600 dark:text-purple-400" />
             </div>
             <div className="flex flex-col">
-              <h1 className="text-xl font-semibold" data-testid="text-app-title">
+              <h1 className="text-xl font-semibold text-slate-800 dark:text-slate-100" data-testid="text-app-title">
                 GabaritAI
               </h1>
-              <p className="text-xs text-muted-foreground">Powered by X-TRI</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">Powered by X-TRI</p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -2504,13 +3100,13 @@ export default function Home() {
                   <DialogTrigger asChild>
                     <Button variant="outline" data-testid="button-answer-key">
                       <ClipboardList className="h-4 w-4 mr-2" />
-                      {answerKey.length > 0 ? "Cadastrar Gabarito" : "Inserir Gabarito"}
+                      Cadastrar Gabarito
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
-                      <DialogTitle>Configuração da Prova</DialogTitle>
-                      <DialogDescription>
+                      <DialogTitle className="text-slate-800 dark:text-slate-100">Configuração da Prova</DialogTitle>
+                      <DialogDescription className="text-slate-600 dark:text-slate-400">
                         Selecione o tipo de prova e insira as respostas corretas.
                       </DialogDescription>
                     </DialogHeader>
@@ -2791,7 +3387,7 @@ export default function Home() {
                 <Button 
                   onClick={handleSalvarAplicacao} 
                   variant="default"
-                  className="bg-green-600 hover:bg-green-700 text-white"
+                  className="bg-green-500 hover:bg-green-600 text-white shadow-sm"
                   data-testid="button-save-application"
                 >
                   <Save className="h-4 w-4 mr-2" />
@@ -2839,42 +3435,42 @@ export default function Home() {
             {/* Coluna Esquerda: Tabs de Processar/Gerar */}
             <div className="lg:col-span-2 space-y-6">
               <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as "process" | "generate")} className="w-full">
-              <TabsList className="grid w-full max-w-lg mx-auto grid-cols-2">
-                <TabsTrigger value="process" data-testid="tab-process">
+              <TabsList className="grid w-full max-w-lg mx-auto grid-cols-2 bg-slate-100 dark:bg-slate-800">
+                <TabsTrigger value="process" data-testid="tab-process" className="data-[state=active]:bg-white data-[state=active]:text-primary dark:data-[state=active]:bg-slate-700">
                   <Upload className="h-4 w-4 mr-2" />
                   Processar Gabaritos
                 </TabsTrigger>
-                <TabsTrigger value="generate" data-testid="tab-generate">
+                <TabsTrigger value="generate" data-testid="tab-generate" className="data-[state=active]:bg-white data-[state=active]:text-primary dark:data-[state=active]:bg-slate-700">
                   <Users className="h-4 w-4 mr-2" />
                   Gerar Gabaritos
                 </TabsTrigger>
               </TabsList>
               
               <TabsContent value="process" className="mt-6">
-                <Card className="border-dashed border-2">
-                  <CardContent className="p-0">
+                <Card className="border-dashed border-2 border-purple-300 dark:border-purple-700 bg-white dark:bg-slate-900 h-full">
+                  <CardContent className="p-0 h-full">
                     <div
                       {...getRootProps()}
-                      className={`min-h-64 flex flex-col items-center justify-center p-12 cursor-pointer transition-colors ${
-                        isDragActive ? "bg-primary/5" : "hover:bg-muted/50"
+                      className={`min-h-64 h-full flex flex-col items-center justify-center p-12 cursor-pointer transition-colors ${
+                        isDragActive ? "bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20" : "hover:bg-gradient-to-br hover:from-purple-50/50 hover:to-blue-50/50 dark:hover:from-purple-900/10 dark:hover:to-blue-900/10"
                       }`}
                       data-testid="dropzone-upload"
                     >
                       <input {...getInputProps()} data-testid="input-file-upload" />
-                      <div className={`p-4 rounded-full mb-4 ${isDragActive ? "bg-primary/20" : "bg-muted"}`}>
-                        <Upload className={`h-10 w-10 ${isDragActive ? "text-primary" : "text-muted-foreground"}`} />
+                      <div className={`p-4 rounded-full mb-4 ${isDragActive ? "bg-purple-100 dark:bg-purple-900/30" : "bg-slate-100 dark:bg-slate-800"}`}>
+                        <Upload className={`h-10 w-10 ${isDragActive ? "text-purple-600 dark:text-purple-400" : "text-slate-500 dark:text-slate-400"}`} />
                       </div>
-                      <p className="text-lg font-medium text-foreground mb-2">
+                      <p className="text-lg font-medium text-slate-800 dark:text-slate-100 mb-2">
                         {isDragActive ? "Solte os arquivos aqui" : "Arraste PDFs de gabarito aqui"}
                       </p>
-                      <p className="text-sm text-muted-foreground mb-4">
+                      <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
                         ou clique para selecionar arquivos
                       </p>
                       <div className="flex gap-2 flex-wrap justify-center">
-                        <Badge variant="outline" className="text-xs">
+                        <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700">
                           Aceita múltiplos PDFs
                         </Badge>
-                        <Badge variant="outline" className="text-xs">
+                        <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700">
                           Processamento em lote
                         </Badge>
                       </div>
@@ -2886,11 +3482,11 @@ export default function Home() {
               <TabsContent value="generate" className="mt-6">
                 <Card>
                   <CardHeader className="text-center">
-                    <CardTitle className="flex items-center justify-center gap-2">
-                      <FileSpreadsheet className="h-5 w-5 text-primary" />
+                    <CardTitle className="flex items-center justify-center gap-2 text-slate-800 dark:text-slate-100">
+                      <FileSpreadsheet className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                       Gerar Gabaritos Personalizados
                     </CardTitle>
-                    <CardDescription>
+                    <CardDescription className="text-slate-600 dark:text-slate-400">
                       Faça upload de um CSV com os dados dos alunos para gerar gabaritos com nome, turma e matrícula já preenchidos
                     </CardDescription>
                   </CardHeader>
@@ -3034,59 +3630,62 @@ export default function Home() {
             </div>
             
             {/* Coluna Direita: Histórico de Avaliações */}
-            <div className="lg:col-span-1">
-              <Card className="bg-white dark:bg-card shadow-sm sticky top-6">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 border-b border-gray-200 dark:border-gray-800">
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={async () => {
-                        try {
-                          // Buscar do backend primeiro
-                          const response = await fetch('/api/avaliacoes');
-                          if (response.ok) {
-                            const result = await response.json();
-                            if (result.avaliacoes) {
-                              setHistoricoAvaliacoes(result.avaliacoes);
+            <div className="lg:col-span-1 flex items-start pt-[72px]">
+              <Card className="bg-white dark:bg-slate-900 shadow-sm w-full border-2 border-purple-200 dark:border-purple-800 flex flex-col h-full min-h-[256px]">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 pt-4 px-4 border-b-2 border-purple-200 dark:border-purple-800 bg-gradient-to-r from-purple-50 via-blue-50 to-purple-50 dark:from-purple-950/40 dark:via-blue-950/40 dark:to-purple-950/40 flex-shrink-0">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={async () => {
+                          try {
+                            // Buscar do backend primeiro
+                            const response = await fetch('/api/avaliacoes');
+                            if (response.ok) {
+                              const result = await response.json();
+                              if (result.avaliacoes) {
+                                setHistoricoAvaliacoes(result.avaliacoes);
+                                toast({
+                                  title: "Histórico atualizado",
+                                  description: `${result.avaliacoes.length} registros carregados do backend`,
+                                });
+                                return;
+                              }
+                            }
+                          } catch (error) {
+                            console.warn('Erro ao buscar do backend:', error);
+                          }
+                          
+                          // Fallback: localStorage
+                          const historicoSalvo = localStorage.getItem('historicoAvaliacoes');
+                          if (historicoSalvo) {
+                            try {
+                              setHistoricoAvaliacoes(JSON.parse(historicoSalvo));
                               toast({
                                 title: "Histórico atualizado",
-                                description: `${result.avaliacoes.length} registros carregados do backend`,
+                                description: "Histórico recarregado do cache local",
                               });
-                              return;
+                            } catch (e) {
+                              console.error('Erro ao recarregar histórico:', e);
                             }
                           }
-                        } catch (error) {
-                          console.warn('Erro ao buscar do backend:', error);
-                        }
-                        
-                        // Fallback: localStorage
-                        const historicoSalvo = localStorage.getItem('historicoAvaliacoes');
-                        if (historicoSalvo) {
-                          try {
-                            setHistoricoAvaliacoes(JSON.parse(historicoSalvo));
-                            toast({
-                              title: "Histórico atualizado",
-                              description: "Histórico recarregado do cache local",
-                            });
-                          } catch (e) {
-                            console.error('Erro ao recarregar histórico:', e);
-                          }
-                        }
-                      }}
-                      className="h-8 w-8 text-gray-500 hover:text-gray-700 dark:text-muted-foreground dark:hover:text-foreground"
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                    </Button>
-                    <CardTitle className="text-lg font-semibold text-gray-900 dark:text-foreground">Histórico de Avaliações</CardTitle>
-                  </div>
-                  <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-600 dark:bg-muted dark:text-muted-foreground">
-                    {historicoAvaliacoes.length} {historicoAvaliacoes.length === 1 ? 'registro' : 'registros'}
-                  </Badge>
-                </CardHeader>
-                <CardContent className="pt-4">
-                  {historicoAvaliacoes.length > 0 ? (
-                    <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                        }}
+                        className="h-7 w-7 text-purple-600 hover:text-purple-700 hover:bg-purple-100 dark:text-purple-400 dark:hover:text-purple-300 dark:hover:bg-purple-900/30"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      </Button>
+                      <CardTitle className="text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                        <History className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                        Histórico de Avaliações
+                      </CardTitle>
+                    </div>
+                    <Badge variant="secondary" className="text-xs bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-900/50 dark:text-purple-300 dark:border-purple-700 px-1.5 py-0.5">
+                      {historicoAvaliacoes.length} {historicoAvaliacoes.length === 1 ? 'registro' : 'registros'}
+                    </Badge>
+                  </CardHeader>
+                  <CardContent className="pt-3 px-4 pb-4 flex-1 overflow-hidden">
+                    {historicoAvaliacoes.length > 0 ? (
+                      <div className="space-y-2 h-full overflow-y-auto pr-1">
                       {historicoAvaliacoes.map((avaliacao, index) => {
                         const dataFormatada = new Date(avaliacao.data).toLocaleDateString('pt-BR', {
                           day: '2-digit',
@@ -3098,10 +3697,10 @@ export default function Home() {
                         return (
                           <div
                             key={avaliacao.id}
-                            className={`flex items-center justify-between p-4 rounded-lg border transition-colors ${
+                            className={`flex items-center justify-between p-2.5 rounded-lg border transition-all ${
                               avaliacaoCarregada === avaliacao.id
-                                ? "bg-primary/10 border-primary dark:bg-primary/20"
-                                : "bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-muted/30"
+                                ? "bg-purple-100 border-purple-400 dark:bg-purple-900/40 dark:border-purple-600 shadow-sm"
+                                : "bg-white dark:bg-slate-900 hover:bg-purple-50 dark:hover:bg-purple-950/30 border-purple-200 dark:border-purple-800 hover:border-purple-300 dark:hover:border-purple-700"
                             }`}
                           >
                             <div 
@@ -3110,31 +3709,31 @@ export default function Home() {
                                 carregarAplicacaoDoHistorico(avaliacao);
                               }}
                             >
-                              <h3 className="font-semibold text-base text-gray-900 dark:text-foreground mb-2 truncate">{tituloCompleto}</h3>
-                              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-muted-foreground">
-                                <Calendar className="h-3 w-3 flex-shrink-0" />
+                              <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-100 mb-1 truncate">{tituloCompleto}</h3>
+                              <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                                <Calendar className="h-3 w-3 flex-shrink-0 text-purple-600 dark:text-purple-400" />
                                 <span>{dataFormatada}</span>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 ml-4">
+                            <div className="flex items-center gap-1.5 ml-3">
                               <div className="flex flex-col items-end flex-shrink-0">
-                                <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                                <div className="text-lg font-bold text-purple-600 dark:text-purple-400">
                                   {avaliacao.mediaTRI.toFixed(1)}
                                 </div>
-                                <div className="text-xs text-gray-500 dark:text-muted-foreground uppercase mt-0.5">MÉDIA</div>
+                                <div className="text-[10px] text-purple-600 dark:text-purple-400 uppercase mt-0.5 font-semibold">MÉDIA</div>
                               </div>
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                                    className="h-6 w-6 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setAvaliacaoParaDeletar(avaliacao);
                                     }}
                                   >
-                                    <Trash2 className="h-4 w-4" />
+                                    <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
@@ -3171,10 +3770,12 @@ export default function Home() {
                       })}
                     </div>
                   ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p className="text-sm">Nenhuma avaliação salva ainda.</p>
-                      <p className="text-xs mt-2">Processe um PDF e calcule o TRI V2 para criar o primeiro registro.</p>
+                    <div className="text-center py-6 h-full flex flex-col items-center justify-center">
+                      <div className="p-3 rounded-full bg-purple-100 dark:bg-purple-900/30 w-12 h-12 mx-auto mb-3 flex items-center justify-center">
+                        <History className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                      </div>
+                      <p className="text-xs text-slate-700 dark:text-slate-300 font-medium">Nenhuma avaliação salva ainda.</p>
+                      <p className="text-[10px] mt-1.5 text-slate-500 dark:text-slate-400 px-2">Processe um PDF e calcule o TRI V2 para criar o primeiro registro.</p>
                     </div>
                   )}
                 </CardContent>
@@ -3442,27 +4043,52 @@ export default function Home() {
           </div>
         )}
 
-        {status === "processing" && (
-          <Card>
-            <CardContent className="py-12">
+        {(status === "uploading" || status === "processing") && (
+          <Card className="border-2 border-purple-200 dark:border-purple-800 bg-gradient-to-br from-purple-50/50 to-blue-50/50 dark:from-purple-950/20 dark:to-blue-950/20">
+            <CardContent className="py-16">
               <div className="flex flex-col items-center gap-6">
                 <div className="relative">
-                  <Loader2 className="h-12 w-12 text-primary animate-spin" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-20 h-20 border-4 border-purple-200 dark:border-purple-800 rounded-full"></div>
+                  </div>
+                  <Loader2 className="h-12 w-12 text-purple-600 dark:text-purple-400 animate-spin relative z-10" />
                 </div>
-                <div className="text-center">
-                  <p className="text-lg font-medium mb-2" data-testid="text-processing-status">
-                    Processando página {currentPage} de {pageCount}...
+                <div className="text-center space-y-2">
+                  <p className="text-xl font-semibold text-purple-900 dark:text-purple-100" data-testid="text-processing-status">
+                    {status === "uploading" ? "Carregando PDF..." : `Processando página ${currentPage} de ${pageCount}...`}
                   </p>
-                  <p className="text-sm text-muted-foreground">
-                    Extraindo dados dos alunos
+                  <p className="text-sm text-purple-700 dark:text-purple-300">
+                    {status === "uploading" ? "Aguarde enquanto o arquivo é carregado" : "Extraindo dados dos alunos com OMR"}
                   </p>
+                  {status === "processing" && currentPage > 0 && (
+                    <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                      Isso pode levar alguns segundos por página...
+                    </p>
+                  )}
                 </div>
-                <div className="w-full max-w-md">
-                  <Progress value={progress} className="h-2" data-testid="progress-processing" />
-                  <p className="text-sm text-muted-foreground text-center mt-2">
-                    {Math.round(progress)}% concluído
-                  </p>
+                <div className="w-full max-w-md space-y-2">
+                  <Progress 
+                    value={progress} 
+                    className="h-3 bg-purple-100 dark:bg-purple-900/30" 
+                    data-testid="progress-processing"
+                  />
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-purple-700 dark:text-purple-300 font-medium">
+                      {Math.round(progress)}% concluído
+                    </span>
+                    {status === "processing" && currentPage > 0 && pageCount > 0 && (
+                      <span className="text-purple-600 dark:text-purple-400">
+                        {pageCount - currentPage} página{pageCount - currentPage !== 1 ? 's' : ''} restante{pageCount - currentPage !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
                 </div>
+                {status === "processing" && (
+                  <div className="mt-4 flex items-center gap-2 text-xs text-purple-600 dark:text-purple-400">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <span>Processamento OMR otimizado em execução...</span>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -3516,11 +4142,11 @@ export default function Home() {
           <div className="space-y-4 mt-6">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-green-600" />
-                <span className="font-medium" data-testid="text-success-message">
+                <CheckCircle className="h-5 w-5 text-green-500" />
+                <span className="font-medium text-slate-800 dark:text-slate-100" data-testid="text-success-message">
                   {students.length} aluno{students.length !== 1 ? "s" : ""} processado{students.length !== 1 ? "s" : ""}
                   {answerKey.length > 0 && statistics && (
-                    <span className="text-muted-foreground">
+                    <span className="text-slate-600 dark:text-slate-400">
                       {" "}| Média: {statistics.averageScore}%
                     </span>
                   )}
@@ -3529,34 +4155,36 @@ export default function Home() {
             </div>
 
             <Tabs value={mainActiveTab} onValueChange={setMainActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-6">
-                <TabsTrigger value="alunos" data-testid="tab-alunos">
+              <TabsList className="grid w-full grid-cols-6 bg-slate-100 dark:bg-slate-800">
+                <TabsTrigger value="alunos" data-testid="tab-alunos" className="data-[state=active]:bg-white data-[state=active]:text-primary dark:data-[state=active]:bg-slate-700">
                   <Users className="h-4 w-4 mr-2" />
                   Alunos
                 </TabsTrigger>
-                <TabsTrigger value="scores" data-testid="tab-scores">
+                <TabsTrigger value="scores" data-testid="tab-scores" className="data-[state=active]:bg-white data-[state=active]:text-primary dark:data-[state=active]:bg-slate-700">
                   <BarChart3 className="h-4 w-4 mr-2" />
                   Scores
                 </TabsTrigger>
                 <TabsTrigger 
                   value="tri" 
                   data-testid="tab-tri"
+                  className="data-[state=active]:bg-white data-[state=active]:text-primary dark:data-[state=active]:bg-slate-700"
                 >
-                  <BarChart3 className="h-4 w-4 mr-2" />
+                  <Calculator className="h-4 w-4 mr-2" />
                   Estatísticas TRI {triScoresCount > 0 && `(${triScoresCount})`}
                 </TabsTrigger>
-                <TabsTrigger value="tct" data-testid="tab-tct" disabled={!statistics}>
-                  <Calculator className="h-4 w-4 mr-2" />
+                <TabsTrigger value="tct" data-testid="tab-tct" disabled={!statistics} className="data-[state=active]:bg-white data-[state=active]:text-primary dark:data-[state=active]:bg-slate-700">
+                  <BarChart3 className="h-4 w-4 mr-2" />
                   Estatísticas TCT
                 </TabsTrigger>
-                <TabsTrigger value="conteudos" data-testid="tab-conteudos" disabled={!statistics}>
-                  <FileText className="h-4 w-4 mr-2" />
+                <TabsTrigger value="conteudos" data-testid="tab-conteudos" disabled={!statistics} className="data-[state=active]:bg-white data-[state=active]:text-primary dark:data-[state=active]:bg-slate-700">
+                  <BookOpen className="h-4 w-4 mr-2" />
                   Conteúdos
                 </TabsTrigger>
                 <TabsTrigger 
                   value="relatorio-xtri" 
                   data-testid="tab-relatorio-xtri"
                   disabled={triScoresCount === 0}
+                  className="data-[state=active]:bg-white data-[state=active]:text-primary dark:data-[state=active]:bg-slate-700"
                 >
                   <TrendingUp className="h-4 w-4 mr-2" />
                   Relatório XTRI
@@ -3589,9 +4217,10 @@ export default function Home() {
                       <TableHeader className="sticky top-0 z-10 bg-card">
                         <TableRow className="bg-muted/50 border-b">
                           <TableHead className="w-16 text-center font-semibold text-xs uppercase tracking-wide">#</TableHead>
-                          <TableHead className="min-w-[120px] font-semibold text-xs uppercase tracking-wide">Matrícula</TableHead>
+                          <TableHead className="min-w-[300px] font-semibold text-xs uppercase tracking-wide">Matrícula</TableHead>
                           <TableHead className="min-w-[180px] font-semibold text-xs uppercase tracking-wide">Nome</TableHead>
                           <TableHead className="min-w-[100px] font-semibold text-xs uppercase tracking-wide">Turma</TableHead>
+                          <TableHead className="w-28 text-center font-semibold text-xs uppercase tracking-wide">Ação</TableHead>
                           <TableHead className="min-w-[350px] font-semibold text-xs uppercase tracking-wide">Respostas</TableHead>
                           {answerKey.length > 0 && (
                             <TableHead className="w-24 text-center font-semibold text-xs uppercase tracking-wide">Acertos</TableHead>
@@ -3613,37 +4242,116 @@ export default function Home() {
                               isMediumConfidence ? "border-l-4 border-l-yellow-500" : ""
                             }`}
                           >
-                            <TableCell className="text-center font-medium text-muted-foreground h-12">
+                            <TableCell className="text-center font-medium text-muted-foreground align-top pt-2">
                               {index + 1}
                             </TableCell>
-                            <TableCell className="h-12">
-                              <Input
-                                value={student.studentNumber}
-                                onChange={(e) => updateStudentField(index, "studentNumber", e.target.value)}
-                                className="h-8 text-sm"
-                                data-testid={`input-student-number-${index}`}
-                              />
+                            <TableCell className="align-top pt-2" style={{ width: 'auto', minWidth: '300px', maxWidth: '650px' }}>
+                              <div className="space-y-2">
+                                <Input
+                                  value={student.studentNumber}
+                                  onChange={(e) => updateStudentField(index, "studentNumber", e.target.value)}
+                                  className="h-7 text-xs"
+                                  data-testid={`input-student-number-${index}`}
+                                />
+                                {studentAnalyses.get(student.id)?.analysis && (
+                                  <div className="space-y-2">
+                                    <div className="flex justify-end">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-6 text-xs bg-white hover:bg-orange-50 border-orange-300 text-orange-700 dark:bg-slate-800 dark:hover:bg-orange-900 dark:border-orange-700 dark:text-orange-300"
+                                        onClick={() => {
+                                          const analysis = studentAnalyses.get(student.id)?.analysis;
+                                          if (analysis) {
+                                            handleGenerateAnalysisPDF(student, analysis);
+                                          }
+                                        }}
+                                        data-testid={`button-pdf-analysis-${index}`}
+                                      >
+                                        <FileText className="h-3 w-3 mr-1" />
+                                        Gerar PDF
+                                      </Button>
+                                    </div>
+                                    <div className="p-4 bg-orange-50 dark:bg-orange-950 border-2 border-orange-300 dark:border-orange-700 rounded-lg shadow-sm w-full max-w-[600px] max-h-[400px] overflow-y-auto overflow-x-hidden">
+                                      <div className="text-sm text-orange-900 dark:text-orange-100 leading-relaxed break-words pr-2">
+                                        <div className="whitespace-pre-wrap font-mono text-xs" style={{ 
+                                          fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace'
+                                        }}>
+                                          {(studentAnalyses.get(student.id)?.analysis || '').split('\n').map((line, idx) => {
+                                            // Formatar títulos
+                                            if (line.startsWith('## ')) {
+                                              return <div key={idx} className="font-bold text-base mt-3 mb-2 text-orange-900 dark:text-orange-100">{line.replace('## ', '')}</div>;
+                                            }
+                                            if (line.startsWith('### ')) {
+                                              return <div key={idx} className="font-semibold text-sm mt-2 mb-1 text-orange-900 dark:text-orange-100">{line.replace('### ', '')}</div>;
+                                            }
+                                            // Formatar negrito
+                                            if (line.includes('**')) {
+                                              const parts = line.split(/(\*\*[^*]+\*\*)/g);
+                                              return (
+                                                <div key={idx} className="mb-1">
+                                                  {parts.map((part, pIdx) => 
+                                                    part.startsWith('**') && part.endsWith('**') 
+                                                      ? <strong key={pIdx} className="font-bold">{part.replace(/\*\*/g, '')}</strong>
+                                                      : <span key={pIdx}>{part}</span>
+                                                  )}
+                                                </div>
+                                              );
+                                            }
+                                            // Linha normal
+                                            return <div key={idx} className="mb-1">{line || '\u00A0'}</div>;
+                                          })}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             </TableCell>
-                            <TableCell className="h-12">
+                            <TableCell className="align-top pt-2">
                               <Input
                                 value={student.studentName}
                                 onChange={(e) => updateStudentField(index, "studentName", e.target.value)}
-                                className="h-8 text-sm"
+                                className="h-7 text-xs"
                                 data-testid={`input-student-name-${index}`}
                               />
                             </TableCell>
-                            <TableCell className="h-12">
+                            <TableCell className="align-top pt-2">
                               <Input
                                 value={student.turma || ""}
                                 onChange={(e) => updateStudentField(index, "turma", e.target.value)}
-                                className="h-8 text-sm"
+                                className="h-7 text-xs"
                                 placeholder="Ex: 3º A"
                                 data-testid={`input-student-turma-${index}`}
                               />
                             </TableCell>
-                            <TableCell className="h-12">
+                            <TableCell className="text-center align-top pt-2">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs bg-orange-50 hover:bg-orange-100 border-orange-300 text-orange-700 dark:bg-orange-950 dark:hover:bg-orange-900 dark:border-orange-800 dark:text-orange-300"
+                                    onClick={() => handleAnalyzeStudentProfile(student, index)}
+                                    disabled={!triScores.has(student.id) && !triScoresByArea.has(student.id)}
+                                    data-testid={`button-analyze-student-${index}`}
+                                  >
+                                    {studentAnalyses.get(student.id)?.loading ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Brain className="h-3 w-3" />
+                                    )}
+                                    <span className="ml-1 hidden sm:inline">Analisar</span>
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Analisar o perfil do aluno</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TableCell>
+                            <TableCell className="align-top pt-2">
                               {/* Layout em 6 colunas - leitura VERTICAL (igual gabarito físico) */}
-                              <div className="grid grid-cols-6 gap-2">
+                              <div className="grid grid-cols-6 gap-1.5">
                                 {[0, 1, 2, 3, 4, 5].map((colIndex) => {
                                   const questionsPerColumn = Math.ceil(student.answers.length / 6);
                                   
@@ -3671,7 +4379,7 @@ export default function Home() {
                                             <Input
                                               value={answerStr || ""}
                                               onChange={(e) => updateStudentAnswer(index, ansIndex, e.target.value)}
-                                              className={`h-7 w-8 text-center text-xs font-mono p-0 ${
+                                              className={`h-6 w-7 text-center text-xs font-mono p-0 ${
                                                 isCorrect ? "border-green-500 bg-green-50 dark:bg-green-950" : 
                                                 isWrong ? "border-red-500 bg-red-50 dark:bg-red-950" : ""
                                               }`}
@@ -3687,13 +4395,13 @@ export default function Home() {
                               </div>
                             </TableCell>
                             {answerKey.length > 0 && (
-                              <TableCell className="text-center h-12">
+                              <TableCell className="text-center align-top pt-2">
                                 <Badge variant={student.correctAnswers && student.correctAnswers >= answerKey.length * 0.6 ? "default" : "secondary"}>
                                   {student.correctAnswers || 0}/{answerKey.length}
                                 </Badge>
                               </TableCell>
                             )}
-                            <TableCell className="text-center h-12">
+                            <TableCell className="text-center align-top pt-2">
                               <Badge variant="outline" className="text-xs">
                                 {student.pageNumber}
                               </Badge>
@@ -3711,11 +4419,11 @@ export default function Home() {
               <TabsContent value="scores" className="mt-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <BarChart3 className="h-5 w-5 text-blue-600" />
+                    <CardTitle className="text-base flex items-center gap-2 text-slate-800 dark:text-slate-100">
+                      <BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                       Notas e Scores dos Alunos
                     </CardTitle>
-                    <CardDescription>
+                    <CardDescription className="text-slate-600 dark:text-slate-400">
                       Visualização completa das notas TCT (0,0 a 10,0) e TRI (0-1000) por aluno e por área (LC, CH, CN, MT).
                     </CardDescription>
                   </CardHeader>

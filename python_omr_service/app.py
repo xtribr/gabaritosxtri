@@ -15,8 +15,8 @@ import json
 import logging
 import os
 
-# Configurar logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Configurar logging - apenas WARNING e ERROR para melhor performance
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -190,11 +190,18 @@ def select_template(name: Optional[str]) -> Dict:
 # ============================================================================
 
 def preprocess_pil_image(pil_img: Image.Image) -> np.ndarray:
-    """Pré-processa a imagem para OMR (grayscale, autocontrast, sharpen, threshold)."""
+    """Pré-processa a imagem para OMR (grayscale, autocontrast, threshold) - otimizado."""
+    # Reduzir tamanho se muito grande (acelera processamento)
+    max_size = 3000
+    if max(pil_img.size) > max_size:
+        ratio = max_size / max(pil_img.size)
+        new_size = (int(pil_img.width * ratio), int(pil_img.height * ratio))
+        pil_img = pil_img.resize(new_size, Image.Resampling.LANCZOS)
+    
     gray = pil_img.convert("L")
-    gray = ImageOps.autocontrast(gray, cutoff=5)
-    gray = gray.filter(ImageFilter.SHARPEN)
-    gray = gray.filter(ImageFilter.SHARPEN)
+    # Autocontrast otimizado (cutoff menor = mais rápido)
+    gray = ImageOps.autocontrast(gray, cutoff=2)
+    # Removido SHARPEN para melhor performance (não é crítico)
     bw = gray.point(lambda x: 0 if x < 100 else 255, '1')
     return np.array(bw, dtype=np.uint8)
 
@@ -241,7 +248,7 @@ def detect_bubbles_fixed(image_array: np.ndarray, template: Dict, debug: bool = 
         
         options = template["options"]
         
-        logger.info(f"[OpenCV] Template {template['name']}: scale_x={scale_x:.3f}, scale_y={scale_y:.3f}, radius={bubble_radius_px}px")
+        # Log removido para melhor performance
 
         for q in template["questions"]:
             q_id = q["id"]
@@ -292,7 +299,7 @@ def detect_bubbles_fixed(image_array: np.ndarray, template: Dict, debug: bool = 
         options = template["options"]
         bubble_radius_px = max(4, int(width * 0.006))
         
-        logger.info(f"[OpenCV] Template 45Q: width={width}, height={height}, radius={bubble_radius_px}px")
+        # Log removido para melhor performance
 
         for idx, y_norm in enumerate(question_y, start=1):
             if idx > template["total_questions"]:
@@ -403,21 +410,14 @@ def process_omr_page(
     template_key = candidate if candidate in AVAILABLE_TEMPLATES else DEFAULT_TEMPLATE_NAME
     height, width = image.shape[:2]
     # Log reduzido para performance
-    if debug:
-        logger.info(f"[OMR] Página {page_number}: {width}x{height}px | template={template_key}")
-
     working_image = image
     alignment_info = {"aligned": False}
     if align_marks and "registration_marks" in template:
-        if debug:
-            logger.info(f"[OMR] Tentando alinhamento por marcadores...")
+        # Logs removidos para melhor performance
         aligned_img, info = align_with_registration_marks(image, template)
         alignment_info = info
         working_image = aligned_img
-        if info.get("aligned") and debug:
-            logger.info(f"[OMR] ✅ Alinhamento aplicado")
-        elif not info.get("aligned") and debug:
-            logger.warning(f"[OMR] ⚠️  Alinhamento falhou")
+        # Logs removidos para melhor performance
 
     # Pré-processamento otimizado
     pil_img = Image.fromarray(working_image)
@@ -427,10 +427,8 @@ def process_omr_page(
     answers, debug_image = detect_bubbles_fixed(bw_array, template, debug=debug)
     
     detected_count = len([q for q in answers.values() if q != "Não respondeu"])
-    # Log apenas resultado final (reduz verbosidade)
-    if debug or detected_count < template['total_questions'] * 0.8:
-        logger.info(f"[OMR] ✅ Página {page_number}: {detected_count}/{template['total_questions']} respostas marcadas")
-
+    # Log removido para melhor performance
+    
     result = {
         "pagina": page_number,
         "template": template_key,
@@ -445,7 +443,7 @@ def process_omr_page(
         _, buffer = cv2.imencode('.png', debug_image)
         debug_base64 = base64.b64encode(buffer).decode('utf-8')
         result["debug_image"] = debug_base64
-        logger.info(f"[OMR] Debug image gerada: {len(debug_base64)} bytes")
+        # Log removido para melhor performance
 
     return result
 
@@ -459,7 +457,8 @@ def pdf_url_to_images(pdf_url: str) -> List[np.ndarray]:
         
         try:
             from pdf2image import convert_from_bytes
-            images = convert_from_bytes(pdf_bytes, dpi=300)  # 300 DPI para melhor qualidade
+            # DPI reduzido para 150 para melhor performance (ainda mantém qualidade suficiente)
+            images = convert_from_bytes(pdf_bytes, dpi=150, thread_count=2)
             return [np.array(img) for img in images]
         except ImportError:
             logger.error("pdf2image não instalado")
@@ -517,7 +516,7 @@ def validate_with_chatgpt_internal(image_bytes: bytes, omr_result: Dict[str, str
             "Content-Type": "application/json"
         }
         
-        logger.info("[ChatGPT] Validando com OpenAI API...")
+        # Log removido para melhor performance
         response = requests.post(
             "https://api.openai.com/v1/chat/completions",
             headers=headers,
@@ -546,7 +545,7 @@ def validate_with_chatgpt_internal(image_bytes: bytes, omr_result: Dict[str, str
         corrections_count = len(corrections)
         agreement_rate = sum(1 for i in range(len(omr_array)) if omr_array[i] == validated_answers[i]) / len(omr_array) * 100
         
-        logger.info(f"[ChatGPT] ✅ {corrections_count} correções | {agreement_rate:.1f}% concordância")
+        # Log removido para melhor performance
         
         return {
             "status": "success",
@@ -588,17 +587,16 @@ def process_pdf():
         
         template_name = request.args.get('template', DEFAULT_TEMPLATE_NAME)
         template_key = template_name.lower() if template_name and template_name.lower() in AVAILABLE_TEMPLATES else DEFAULT_TEMPLATE_NAME
-        logger.info(f"[PDF] Processando: {pdf_url} | template={template_key}")
-        
+        # Log removido para melhor performance
         images = pdf_url_to_images(pdf_url)
-        logger.info(f"[PDF] {len(images)} páginas convertidas")
+        # Log removido para melhor performance
         
         results = []
         for page_num, image in enumerate(images, start=1):
             try:
                 result = process_omr_page(image, page_num, template_name=template_key)
                 results.append(result)
-                logger.info(f"[PDF] Página {page_num}: {len([q for q in result['resultado']['questoes'].values() if q != 'Não respondeu'])} respostas")
+                # Log removido para melhor performance
             except Exception as e:
                 logger.error(f"[PDF] Erro página {page_num}: {e}")
                 results.append({"pagina": page_num, "status": "erro", "mensagem": str(e)})
@@ -627,11 +625,10 @@ def process_image():
             return jsonify({"status": "erro", "mensagem": "Arquivo vazio"}), 400
         
         image_bytes = image_file.read()
-        logger.info(f"[Image] Recebida: {len(image_bytes)} bytes | {image_file.filename}")
-        
+        # Log removido para melhor performance
         image = Image.open(io.BytesIO(image_bytes))
         image_array = np.array(image)
-        logger.info(f"[Image] Convertida: {image_array.shape}")
+        # Log removido para melhor performance
         
         page_num = int(request.form.get('page', 1))
         template_name = request.form.get('template', DEFAULT_TEMPLATE_NAME)
@@ -639,10 +636,9 @@ def process_image():
         validate_chatgpt = request.args.get('validate_with_chatgpt', 'false').lower() == 'true'
         template_key = template_name.lower() if template_name and template_name.lower() in AVAILABLE_TEMPLATES else DEFAULT_TEMPLATE_NAME
         
-        logger.info(f"[Image] Página {page_num} | template={template_key} | debug={debug_mode} | chatgpt={validate_chatgpt}")
-        
+        # Log removido para melhor performance
         result = process_omr_page(image_array, page_num, template_name=template_key, debug=debug_mode)
-        logger.info(f"[Image] ✅ Processada com sucesso")
+        # Log removido para melhor performance
         
         response_data = {
             "status": "sucesso",
@@ -658,7 +654,7 @@ def process_image():
                 response_data["chatgpt_validation"] = {"status": "skipped", "reason": "OPENAI_API_KEY não fornecida"}
             else:
                 try:
-                    logger.info(f"[Image] ChatGPT: Validando...")
+                    # Log removido para melhor performance
                     chatgpt_result = validate_with_chatgpt_internal(
                         image_bytes=image_bytes,
                         omr_result=result["resultado"]["questoes"],
@@ -668,7 +664,7 @@ def process_image():
                     response_data["chatgpt_validation"] = chatgpt_result
                     
                     if chatgpt_result.get("corrections_count", 0) > 0:
-                        logger.info(f"[Image] ChatGPT: Aplicando {chatgpt_result['corrections_count']} correções")
+                        # Log removido para melhor performance
                         result["resultado"]["questoes"] = chatgpt_result["chatgpt_validated"]
                         response_data["pagina"] = result
                         

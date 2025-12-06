@@ -81,6 +81,27 @@ export default {
           busy: "rgb(239 68 68)",
           offline: "rgb(156 163 175)",
         },
+        // Cores do outro site
+        purple: {
+          light: "#a855f7",
+          DEFAULT: "#8b5cf6",
+          dark: "#7c3aed",
+        },
+        blue: {
+          light: "#3b82f6",
+          DEFAULT: "#2563eb",
+          dark: "#1e40af",
+        },
+        orange: {
+          light: "#fb923c",
+          DEFAULT: "#f97316",
+          dark: "#ea580c",
+        },
+        yellow: {
+          light: "#fcd34d",
+          DEFAULT: "#fbbf24",
+          dark: "#f59e0b",
+        },
       },
       fontFamily: {
         sans: ["var(--font-sans)"],
