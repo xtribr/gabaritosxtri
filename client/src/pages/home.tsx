@@ -3171,7 +3171,7 @@ export default function Home() {
 
               {/* ABA 3: ESTATISTICAS TRI */}
               <TabsContent value="tri" className="mt-4">
-                {statistics && triScoresCount > 0 && triScores.size > 0 && (
+                {triScoresCount > 0 && triScores.size > 0 && (
                   <div className="space-y-4" data-testid="statistics-tri-grid">
                     {/* Card de Resumo TRI */}
                     <Card className="border-blue-200 dark:border-blue-800">
