@@ -317,10 +317,10 @@ export default function Home() {
         ch: areaScores.CH !== undefined ? parseFloat(areaScores.CH.toFixed(1)) : null, // TCT
         cn: areaScores.CN !== undefined ? parseFloat(areaScores.CN.toFixed(1)) : null, // TCT
         mt: areaScores.MT !== undefined ? parseFloat(areaScores.MT.toFixed(1)) : null, // TCT
-        triLc: triAreaScores.LC !== undefined ? parseFloat(triAreaScores.LC.toFixed(1)) : null, // TRI
-        triCh: triAreaScores.CH !== undefined ? parseFloat(triAreaScores.CH.toFixed(1)) : null, // TRI
-        triCn: triAreaScores.CN !== undefined ? parseFloat(triAreaScores.CN.toFixed(1)) : null, // TRI
-        triMt: triAreaScores.MT !== undefined ? parseFloat(triAreaScores.MT.toFixed(1)) : null, // TRI
+        triLc: triAreaScores.LC !== undefined ? parseFloat(triAreaScores.LC.toFixed(2)) : null, // TRI
+        triCh: triAreaScores.CH !== undefined ? parseFloat(triAreaScores.CH.toFixed(2)) : null, // TRI
+        triCn: triAreaScores.CN !== undefined ? parseFloat(triAreaScores.CN.toFixed(2)) : null, // TRI
+        triMt: triAreaScores.MT !== undefined ? parseFloat(triAreaScores.MT.toFixed(2)) : null, // TRI
         lcAcertos: areaCorrectAnswers.LC || 0, // Acertos LC
         chAcertos: areaCorrectAnswers.CH || 0, // Acertos CH
         cnAcertos: areaCorrectAnswers.CN || 0, // Acertos CN
@@ -1183,13 +1183,22 @@ export default function Home() {
           const student = studentsWithScores[index];
           if (!student) return;
 
-          // TRI total
-          const triTotal = resultado.tri_geral?.tri_ajustado || 0;
+          // TRI total - Python retorna tri_geral diretamente (não tri_geral.tri_ajustado)
+          const triTotal = resultado.tri_geral || 0;
           triScoresMap.set(student.id, triTotal);
 
-          // TRI por área
+          // TRI por área - Python retorna tri_lc, tri_ch, tri_cn, tri_mt diretamente
           const areaScores: Record<string, number> = {};
-          if (resultado.areas) {
+          
+          // Verificar formato novo (direto: tri_lc, tri_ch, etc.)
+          if (resultado.tri_lc !== undefined) {
+            areaScores.LC = resultado.tri_lc;
+            areaScores.CH = resultado.tri_ch || 0;
+            areaScores.CN = resultado.tri_cn || 0;
+            areaScores.MT = resultado.tri_mt || 0;
+          }
+          // Verificar formato antigo (aninhado: areas.LC.tri.tri_ajustado)
+          else if (resultado.areas) {
             Object.entries(resultado.areas).forEach(([areaName, areaData]: [string, any]) => {
               if (areaData.tri?.tri_ajustado) {
                 // Mapear nomes para siglas
@@ -1204,6 +1213,7 @@ export default function Home() {
               }
             });
           }
+          
           triScoresByAreaMap.set(student.id, areaScores);
         });
 
@@ -3320,7 +3330,7 @@ export default function Home() {
                                       {student.triLc !== null && student.triLc !== undefined ? (
                                         <div className="flex flex-col items-center gap-0.5">
                                           <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                            {student.triLc.toFixed(1)}
+                                            {student.triLc.toFixed(2)}
                                           </span>
                                           <span className="text-xs text-muted-foreground">{student.lcAcertos || 0} acertos</span>
                                         </div>
@@ -3332,7 +3342,7 @@ export default function Home() {
                                       {student.triCh !== null && student.triCh !== undefined ? (
                                         <div className="flex flex-col items-center gap-0.5">
                                           <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                            {student.triCh.toFixed(1)}
+                                            {student.triCh.toFixed(2)}
                                           </span>
                                           <span className="text-xs text-muted-foreground">{student.chAcertos || 0} acertos</span>
                                         </div>
@@ -3344,7 +3354,7 @@ export default function Home() {
                                       {student.triCn !== null && student.triCn !== undefined ? (
                                         <div className="flex flex-col items-center gap-0.5">
                                           <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                            {student.triCn.toFixed(1)}
+                                            {student.triCn.toFixed(2)}
                                           </span>
                                           <span className="text-xs text-muted-foreground">{student.cnAcertos || 0} acertos</span>
                                         </div>
@@ -3356,7 +3366,7 @@ export default function Home() {
                                       {student.triMt !== null && student.triMt !== undefined ? (
                                         <div className="flex flex-col items-center gap-0.5">
                                           <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                            {student.triMt.toFixed(1)}
+                                            {student.triMt.toFixed(2)}
                                           </span>
                                           <span className="text-xs text-muted-foreground">{student.mtAcertos || 0} acertos</span>
                                         </div>

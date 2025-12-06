@@ -229,20 +229,21 @@ class TRICalculator:
             ResultadoTRI com detalhes do cálculo
         """
         
-        # [CRÍTICO] Se zero acertos, retornar TRI mínima SEM ajustes
+        # [CRÍTICO] Se zero acertos, retornar TRI MÉDIA OFICIAL SEM ajustes
+        # Valores obrigatórios: CH=329.8, CN=339.9, LC=299.6, MT=342.8
         if acertos == 0:
             baseline = self.tabela.obter(area, 0)
-            tri_min = baseline['tri_min']
+            tri_med = baseline['tri_med']  # Usar tri_med (não tri_min) para valores oficiais
             
             return ResultadoTRI(
                 area=area,
                 acertos=acertos,
-                tri_baseline=tri_min,
+                tri_baseline=tri_med,
                 ajuste_coerencia=0.0,
                 ajuste_relacao=0.0,
                 penalidade=0.0,
-                tri_ajustado=tri_min,
-                motivo=f'Zero acertos: TRI mínima ({tri_min:.1f}) sem ajustes'
+                tri_ajustado=tri_med,
+                motivo=f'Zero acertos: TRI oficial ({tri_med:.1f}) sem ajustes'
             )
         
         # Buscar valores baseline
