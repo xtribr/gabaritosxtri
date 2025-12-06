@@ -2752,17 +2752,21 @@ export default function Home() {
                                           answerStr.trim() !== "" && answerStr.toUpperCase().trim() !== keyStr.toUpperCase().trim();
                                         
                                         return (
-                                          <Input
-                                            key={ansIndex}
-                                            value={answerStr || ""}
-                                            onChange={(e) => updateStudentAnswer(index, ansIndex, e.target.value)}
-                                            className={`h-7 w-8 text-center text-xs font-mono p-0 ${
-                                              isCorrect ? "border-green-500 bg-green-50 dark:bg-green-950" : 
-                                              isWrong ? "border-red-500 bg-red-50 dark:bg-red-950" : ""
-                                            }`}
-                                            maxLength={1}
-                                            data-testid={`input-answer-${index}-${ansIndex}`}
-                                          />
+                                          <div key={ansIndex} className="flex items-center gap-1">
+                                            <span className="text-xs text-muted-foreground w-5 text-right font-mono">
+                                              {(ansIndex + 1).toString().padStart(2, '0')}
+                                            </span>
+                                            <Input
+                                              value={answerStr || ""}
+                                              onChange={(e) => updateStudentAnswer(index, ansIndex, e.target.value)}
+                                              className={`h-7 w-8 text-center text-xs font-mono p-0 ${
+                                                isCorrect ? "border-green-500 bg-green-50 dark:bg-green-950" : 
+                                                isWrong ? "border-red-500 bg-red-50 dark:bg-red-950" : ""
+                                              }`}
+                                              maxLength={1}
+                                              data-testid={`input-answer-${index}-${ansIndex}`}
+                                            />
+                                          </div>
                                         );
                                       })}
                                     </div>
