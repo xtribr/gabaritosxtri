@@ -393,6 +393,97 @@ class TRIProcessadorV2:
                 'motivo': resultado.motivo
             } for area, resultado in resultados.items()}
         }
+    
+    def processar_turma(
+        self,
+        alunos: list,
+        gabarito: dict,
+        areas_config: dict
+    ) -> tuple:
+        """
+        Processa uma turma completa de alunos.
+        
+        Args:
+            alunos: Lista de dicionários com dados dos alunos
+            gabarito: Dicionário com gabarito oficial
+            areas_config: Configuração de áreas {'LC': [1, 45], 'CH': [46, 90], ...}
+        
+        Returns:
+            Tuple (prova_analysis, resultados)
+        """
+        resultados = []
+        
+        for aluno in alunos:
+            # Contar acertos por área
+            lc_acertos = 0
+            ch_acertos = 0
+            cn_acertos = 0
+            mt_acertos = 0
+            
+            # LC: questões 1-45
+            for i in range(1, 46):
+                q_key = f'q{i}'
+                if q_key in aluno and str(i) in gabarito:
+                    if aluno[q_key] == gabarito[str(i)]:
+                        lc_acertos += 1
+            
+            # CH: questões 46-90
+            for i in range(46, 91):
+                q_key = f'q{i}'
+                if q_key in aluno and str(i) in gabarito:
+                    if aluno[q_key] == gabarito[str(i)]:
+                        ch_acertos += 1
+            
+            # CN: questões 1-45
+            for i in range(1, 46):
+                q_key = f'q{i}'
+                if q_key in aluno and str(i) in gabarito:
+                    if aluno[q_key] == gabarito[str(i)]:
+                        cn_acertos += 1
+            
+            # MT: questões 46-90
+            for i in range(46, 91):
+                q_key = f'q{i}'
+                if q_key in aluno and str(i) in gabarito:
+                    if aluno[q_key] == gabarito[str(i)]:
+                        mt_acertos += 1
+            
+            # Processar aluno
+            resultado_aluno = self.processar_aluno(
+                lc_acertos=lc_acertos,
+                ch_acertos=ch_acertos,
+                cn_acertos=cn_acertos,
+                mt_acertos=mt_acertos
+            )
+            
+            # Adicionar nome do aluno
+            resultado_aluno['nome'] = aluno.get('nome', 'Sem nome')
+            resultado_aluno['lc_acertos'] = lc_acertos
+            resultado_aluno['ch_acertos'] = ch_acertos
+            resultado_aluno['cn_acertos'] = cn_acertos
+            resultado_aluno['mt_acertos'] = mt_acertos
+            
+            resultados.append(resultado_aluno)
+        
+        # Análise da prova (estatísticas gerais)
+        if resultados:
+            prova_analysis = {
+                'total_alunos': len(resultados),
+                'tri_medio': np.mean([r['tri_geral'] for r in resultados]),
+                'tri_min': np.min([r['tri_geral'] for r in resultados]),
+                'tri_max': np.max([r['tri_geral'] for r in resultados]),
+                'tct_medio': np.mean([r['tct'] for r in resultados])
+            }
+        else:
+            prova_analysis = {
+                'total_alunos': 0,
+                'tri_medio': 0,
+                'tri_min': 0,
+                'tri_max': 0,
+                'tct_medio': 0
+            }
+        
+        return prova_analysis, resultados
 
 
 # ════════════════════════════════════════════════════════════════════════════════
