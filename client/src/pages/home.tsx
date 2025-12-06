@@ -229,26 +229,6 @@ export default function Home() {
     if (answerKey.length === 0) return students;
     
     return students.map((student, index) => {
-      let correctAnswers = 0;
-      let wrongAnswers = 0;
-      
-      student.answers.forEach((answer, index) => {
-        if (index < answerKey.length && answer != null && answerKey[index] != null) {
-          const normalizedAnswer = String(answer).toUpperCase().trim();
-          const normalizedKey = String(answerKey[index]).toUpperCase().trim();
-          
-          if (normalizedAnswer === normalizedKey) {
-            correctAnswers++;
-          } else if (normalizedAnswer !== "") {
-            wrongAnswers++;
-          }
-        }
-      });
-      
-      const score = answerKey.length > 0 
-        ? Math.round((correctAnswers / answerKey.length) * 1000) / 10 
-        : 0;
-      
       // Calcular acertos por área (LC, CH, CN, MT)
       // CRÍTICO: PRESERVAR TODOS os acertos já salvos (vindos do Python TRI)
       // Não recalcular áreas que já têm acertos salvos, mesmo que não estejam no template atual
@@ -282,12 +262,15 @@ export default function Home() {
         
         // Só calcular se não tiver acertos salvos
         let areaCorrect = 0;
+        let areaWrong = 0;
         for (let i = start - 1; i < end && i < student.answers.length; i++) {
           if (i < answerKey.length && student.answers[i] != null && answerKey[i] != null) {
             const normalizedAnswer = String(student.answers[i]).toUpperCase().trim();
             const normalizedKey = String(answerKey[i]).toUpperCase().trim();
             if (normalizedAnswer === normalizedKey) {
               areaCorrect++;
+            } else if (normalizedAnswer !== "") {
+              areaWrong++;
             }
           }
         }
@@ -297,16 +280,52 @@ export default function Home() {
         }
       });
       
+      // CORREÇÃO CRÍTICA: correctAnswers total = SOMA dos acertos por área
+      // Não contar todas as questões, apenas as áreas que têm acertos calculados
+      const correctAnswers = (areaCorrectAnswers.LC || 0) + 
+                            (areaCorrectAnswers.CH || 0) + 
+                            (areaCorrectAnswers.CN || 0) + 
+                            (areaCorrectAnswers.MT || 0);
+      
+      // wrongAnswers = questões que o aluno ERROU (respondeu mas errou)
+      // Contar apenas questões que foram respondidas mas estão erradas
+      let wrongAnswers = 0;
+      student.answers.forEach((answer, idx) => {
+        if (idx < answerKey.length && answer != null && answerKey[idx] != null) {
+          const normalizedAnswer = String(answer).toUpperCase().trim();
+          const normalizedKey = String(answerKey[idx]).toUpperCase().trim();
+          // Se respondeu mas está errado (não é acerto e não está vazio)
+          if (normalizedAnswer !== "" && normalizedAnswer !== normalizedKey) {
+            wrongAnswers++;
+          }
+        }
+      });
+      
+      // Score TCT: média das notas por área (0-10)
+      const areaScores = student.areaScores || {};
+      const areaScoresArray: number[] = [];
+      if (areaScores.LC !== undefined) areaScoresArray.push(areaScores.LC);
+      if (areaScores.CH !== undefined) areaScoresArray.push(areaScores.CH);
+      if (areaScores.CN !== undefined) areaScoresArray.push(areaScores.CN);
+      if (areaScores.MT !== undefined) areaScoresArray.push(areaScores.MT);
+      
+      const score = areaScoresArray.length > 0
+        ? areaScoresArray.reduce((a, b) => a + b, 0) / areaScoresArray.length
+        : correctAnswers > 0 && answerKey.length > 0
+        ? Math.round((correctAnswers / answerKey.length) * 1000) / 10 
+        : 0;
+      
       if (isFirstStudent) {
         console.log("🔍 [DEBUG studentsWithScores] Acertos FINAIS (TODAS as áreas):", areaCorrectAnswers);
+        console.log("🔍 [DEBUG studentsWithScores] correctAnswers TOTAL (soma das áreas):", correctAnswers);
         console.log("🔍 [DEBUG studentsWithScores] ========================================");
       }
       
       return {
         ...student,
         score,
-        correctAnswers,
-        wrongAnswers,
+        correctAnswers, // CORRIGIDO: Soma dos acertos por área
+        wrongAnswers, // CORRIGIDO: Total respondido - acertos
         areaCorrectAnswers, // Preservar acertos existentes + calcular novos se necessário
         // IMPORTANTE: Preservar explicitamente areaScores (TCT) e triScore (TRI) se existirem
         areaScores: student.areaScores, // Notas TCT por área
@@ -4800,58 +4819,120 @@ export default function Home() {
               <TabsContent value="tri" className="mt-4">
                 {triScoresCount > 0 && triScores.size > 0 && (
                   <div className="space-y-4" data-testid="statistics-tri-grid">
-                    {/* Card de Resumo TRI */}
-                    <Card className="border-blue-200 dark:border-blue-800">
-                      <CardHeader>
-                        <CardTitle className="text-base flex items-center gap-2">
-                          <BarChart3 className="h-5 w-5 text-blue-600" />
-                          Notas TRI Calculadas
-                        </CardTitle>
-                        <CardDescription>
-                          Notas calculadas usando Teoria de Resposta ao Item (TRI) com base na coerência das respostas
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <div>
-                            <p className="text-sm text-muted-foreground">Média TRI</p>
-                            <p className="text-2xl font-bold text-blue-600">
-                              {(() => {
-                                const scores = Array.from(triScores.values());
-                                const avg = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
-                                return avg.toFixed(1);
-                              })()}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-muted-foreground">Maior TRI</p>
-                            <p className="text-2xl font-bold text-green-600">
-                              {(() => {
-                                const scores = Array.from(triScores.values());
-                                const max = scores.length > 0 ? Math.max(...scores) : 0;
-                                return max.toFixed(1);
-                              })()}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-muted-foreground">Menor TRI</p>
-                            <p className="text-2xl font-bold text-red-600">
-                              {(() => {
-                                const scores = Array.from(triScores.values());
-                                const min = scores.length > 0 ? Math.min(...scores) : 0;
-                                return min.toFixed(1);
-                              })()}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-muted-foreground">Alunos com TRI</p>
-                            <p className="text-2xl font-bold">
-                              {triScoresCount}
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    {/* Cards por Área - TRI */}
+                    {(() => {
+                      if (triScoresByArea.size > 0) {
+                        const areas = [
+                          { code: 'LC', name: 'Linguagens', color: 'blue' },
+                          { code: 'CH', name: 'Humanas', color: 'green' },
+                          { code: 'CN', name: 'Natureza', color: 'purple' },
+                          { code: 'MT', name: 'Matemática', color: 'orange' }
+                        ];
+                        
+                        const areaCards = areas.map(({ code, name, color }) => {
+                          // Calcular estatísticas da área
+                          const areaScores = Array.from(triScoresByArea.values())
+                            .map(areaScores => areaScores[code])
+                            .filter((score): score is number => score !== undefined && score > 0);
+                          
+                          if (areaScores.length === 0) return null;
+                          
+                          const triMedio = areaScores.reduce((a, b) => a + b, 0) / areaScores.length;
+                          const triMin = Math.min(...areaScores);
+                          const triMax = Math.max(...areaScores);
+                          
+                          // Calcular posição na barra (0-100%)
+                          const range = triMax - triMin;
+                          const position = range > 0 ? ((triMedio - triMin) / range) * 100 : 50;
+                          
+                          const colorClasses = {
+                            blue: {
+                              bg: 'from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900',
+                              border: 'border-blue-200 dark:border-blue-800',
+                              text: 'text-blue-700 dark:text-blue-300',
+                              bar: 'bg-blue-500',
+                              marker: 'bg-blue-600'
+                            },
+                            green: {
+                              bg: 'from-green-50 to-green-100 dark:from-green-950 dark:to-green-900',
+                              border: 'border-green-200 dark:border-green-800',
+                              text: 'text-green-700 dark:text-green-300',
+                              bar: 'bg-green-500',
+                              marker: 'bg-green-600'
+                            },
+                            purple: {
+                              bg: 'from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900',
+                              border: 'border-purple-200 dark:border-purple-800',
+                              text: 'text-purple-700 dark:text-purple-300',
+                              bar: 'bg-purple-500',
+                              marker: 'bg-purple-600'
+                            },
+                            orange: {
+                              bg: 'from-orange-50 to-orange-100 dark:from-orange-950 dark:to-orange-900',
+                              border: 'border-orange-200 dark:border-orange-800',
+                              text: 'text-orange-700 dark:text-orange-300',
+                              bar: 'bg-orange-500',
+                              marker: 'bg-orange-600'
+                            }
+                          };
+                          
+                          const colors = colorClasses[color as keyof typeof colorClasses];
+                          
+                          return (
+                            <Card key={code} className={`border-2 ${colors.border}`}>
+                              <CardContent className="p-6">
+                                <div className="space-y-4">
+                                  <div>
+                                    <h3 className="text-lg font-bold mb-1">{name}</h3>
+                                    <p className={`text-4xl font-bold ${colors.text}`}>{triMedio.toFixed(1)}</p>
+                                    <p className="text-sm text-muted-foreground mt-1">TRI</p>
+                                  </div>
+                                  
+                                  {/* Barra de Progresso */}
+                                  <div className="space-y-2">
+                                    <div className="relative h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                      <div className={`absolute top-0 left-0 h-full ${colors.bar} opacity-30 w-full`}></div>
+                                      <div 
+                                        className={`absolute top-0 left-0 h-full w-1 ${colors.marker} shadow-lg`}
+                                        style={{ left: `${Math.max(0, Math.min(100, position))}%` }}
+                                      ></div>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Estatísticas de Referência */}
+                                  <div className="pt-2 border-t border-border">
+                                    <p className="text-xs font-medium text-muted-foreground mb-2">Estatísticas da Turma</p>
+                                    <div className="grid grid-cols-3 gap-2 text-xs">
+                                      <div>
+                                        <p className="text-muted-foreground">Mínimo</p>
+                                        <p className="font-bold">{triMin.toFixed(1)}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground">Média</p>
+                                        <p className="font-bold">{triMedio.toFixed(1)}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground">Máximo</p>
+                                        <p className="font-bold">{triMax.toFixed(1)}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          );
+                        }).filter(Boolean);
+                        
+                        if (areaCards.length > 0) {
+                          return (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                              {areaCards}
+                            </div>
+                          );
+                        }
+                      }
+                      return null;
+                    })()}
 
                     {/* Gráfico de Dispersão: Acertos vs TRI */}
                     <Card>
@@ -4914,7 +4995,107 @@ export default function Home() {
                       </CardContent>
                     </Card>
 
-                    {/* Gráfico Radar por Área (se ENEM) */}
+                    {/* Gráfico de Barras: Performance por Área */}
+                    {(() => {
+                      // Usar triScoresByArea para ter dados reais por área
+                      if (triScoresByArea.size > 0) {
+                        const areas = ['LC', 'CH', 'CN', 'MT'];
+                        const areaTriData = areas.map(area => {
+                          const studentsForArea = Array.from(triScoresByArea.values())
+                            .map(areaScores => areaScores[area])
+                            .filter((score): score is number => score !== undefined && score > 0);
+                          
+                          const avg = studentsForArea.length > 0 
+                            ? studentsForArea.reduce((a, b) => a + b, 0) / studentsForArea.length 
+                            : 0;
+                          
+                          // Calcular acertos médios por área (se disponível)
+                          let avgAcertos = 0;
+                          try {
+                            const acertosMedios = studentsWithScores
+                              .map(s => s.areaCorrectAnswers?.[area] || 0)
+                              .filter(a => a > 0);
+                            avgAcertos = acertosMedios.length > 0
+                              ? acertosMedios.reduce((a, b) => a + b, 0) / acertosMedios.length
+                              : 0;
+                          } catch (e) {
+                            // Se areaCorrectAnswers não estiver disponível, usar 0
+                            avgAcertos = 0;
+                          }
+                          
+                          return { 
+                            area, 
+                            tri: avg, 
+                            acertos: avgAcertos,
+                            count: studentsForArea.length 
+                          };
+                        });
+
+                        // Mostrar apenas áreas que têm dados
+                        const areaTriDataFiltered = areaTriData.filter(d => d.tri > 0);
+
+                        if (areaTriDataFiltered.length > 0) {
+                          return (
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="text-base">Performance por Área</CardTitle>
+                                <CardDescription>
+                                  Média TRI e acertos por área de conhecimento ({areaTriDataFiltered.length} área(s) calculada(s))
+                                </CardDescription>
+                              </CardHeader>
+                              <CardContent>
+                                <ResponsiveContainer width="100%" height={400}>
+                                  <BarChart data={areaTriDataFiltered} layout="vertical">
+                                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                                    <XAxis 
+                                      type="number" 
+                                      domain={[0, 1000]}
+                                      tick={{ fontSize: 12 }}
+                                      label={{ value: "Nota TRI", position: "insideBottom", offset: -5 }}
+                                    />
+                                    <YAxis 
+                                      dataKey="area" 
+                                      type="category" 
+                                      tick={{ fontSize: 12 }}
+                                      width={60}
+                                    />
+                                    <RechartsTooltip 
+                                      formatter={(value: number, name: string, props: any) => {
+                                        if (name === "tri") {
+                                          return [`${value.toFixed(1)} (${props.payload.count} aluno(s))`, "TRI Médio"];
+                                        }
+                                        return [`${value.toFixed(1)}`, "Acertos Médios"];
+                                      }}
+                                      contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                                    />
+                                    <Legend />
+                                    <Bar 
+                                      dataKey="tri" 
+                                      name="TRI Médio" 
+                                      radius={[0, 4, 4, 0]}
+                                    >
+                                      {areaTriDataFiltered.map((entry, index) => (
+                                        <Cell 
+                                          key={`cell-${index}`} 
+                                          fill={
+                                            entry.tri >= 600 ? "#10b981" : // Verde para TRI alto
+                                            entry.tri >= 400 ? "#eab308" : // Amarelo para TRI médio
+                                            "#ef4444" // Vermelho para TRI baixo
+                                          } 
+                                        />
+                                      ))}
+                                    </Bar>
+                                  </BarChart>
+                                </ResponsiveContainer>
+                              </CardContent>
+                            </Card>
+                          );
+                        }
+                      }
+                      return null;
+                    })()}
+
+                    {/* Gráfico Radar por Área (se ENEM) - Mantido para comparação */}
                     {(() => {
                       // Usar triScoresByArea para ter dados reais por área
                       if (triScoresByArea.size > 0) {
@@ -4971,6 +5152,184 @@ export default function Home() {
                       }
                       return null;
                     })()}
+
+                    {/* Gráfico de Barras: Distribuição de Notas TRI */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">Distribuição de Notas TRI</CardTitle>
+                        <CardDescription>
+                          Quantidade de alunos por faixa de nota TRI (escala 0-1000)
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <BarChart data={(() => {
+                            // Criar distribuição por faixas TRI
+                            const triRanges = [
+                              { name: "0-300", min: 0, max: 300, count: 0, color: "#ef4444" },
+                              { name: "300-500", min: 300, max: 500, count: 0, color: "#f97316" },
+                              { name: "500-700", min: 500, max: 700, count: 0, color: "#eab308" },
+                              { name: "700-900", min: 700, max: 900, count: 0, color: "#22c55e" },
+                              { name: "900-1000", min: 900, max: 1000, count: 0, color: "#10b981" },
+                            ];
+                            
+                            Array.from(triScores.values()).forEach(triScore => {
+                              for (const range of triRanges) {
+                                if (triScore >= range.min && triScore < range.max) {
+                                  range.count++;
+                                  break;
+                                }
+                              }
+                              // Caso especial: 1000 exato
+                              if (triScore === 1000) {
+                                triRanges[4].count++;
+                              }
+                            });
+                            
+                            return triRanges;
+                          })()}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                            <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                            <RechartsTooltip 
+                              formatter={(value: number) => [`${value} aluno(s)`, "Quantidade"]}
+                              contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                            />
+                            <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                              {(() => {
+                                const triRanges = [
+                                  { name: "0-300", min: 0, max: 300, count: 0, color: "#ef4444" },
+                                  { name: "300-500", min: 300, max: 500, count: 0, color: "#f97316" },
+                                  { name: "500-700", min: 500, max: 700, count: 0, color: "#eab308" },
+                                  { name: "700-900", min: 700, max: 900, count: 0, color: "#22c55e" },
+                                  { name: "900-1000", min: 900, max: 1000, count: 0, color: "#10b981" },
+                                ];
+                                
+                                Array.from(triScores.values()).forEach(triScore => {
+                                  for (const range of triRanges) {
+                                    if (triScore >= range.min && triScore < range.max) {
+                                      range.count++;
+                                      break;
+                                    }
+                                  }
+                                  if (triScore === 1000) {
+                                    triRanges[4].count++;
+                                  }
+                                });
+                                
+                                return triRanges;
+                              })().map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+
+                    {/* Gráfico: Conteúdos com Mais Erros */}
+                    {statistics?.contentStats && statistics.contentStats.length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Conteúdos com Mais Erros</CardTitle>
+                          <CardDescription>
+                            Principais conteúdos onde os alunos apresentaram mais dificuldades
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <ResponsiveContainer width="100%" height={400}>
+                            <BarChart 
+                              data={(() => {
+                                // Ordenar por porcentagem de erro (maior primeiro) e pegar top 10
+                                const sorted = [...statistics.contentStats]
+                                  .sort((a, b) => b.errorPercentage - a.errorPercentage)
+                                  .slice(0, 10)
+                                  .map(item => ({
+                                    conteudo: item.content.length > 40 
+                                      ? item.content.substring(0, 40) + "..." 
+                                      : item.content,
+                                    conteudoCompleto: item.content,
+                                    erroPercentual: item.errorPercentage,
+                                    totalErros: item.totalErrors,
+                                    totalQuestoes: item.totalQuestions,
+                                    totalTentativas: item.totalAttempts
+                                  }));
+                                return sorted;
+                              })()}
+                              layout="vertical"
+                            >
+                              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                              <XAxis 
+                                type="number" 
+                                domain={[0, 100]}
+                                tick={{ fontSize: 12 }}
+                                label={{ value: "% de Erros", position: "insideBottom", offset: -5 }}
+                              />
+                              <YAxis 
+                                dataKey="conteudo" 
+                                type="category" 
+                                tick={{ fontSize: 11 }}
+                                width={200}
+                              />
+                              <RechartsTooltip 
+                                formatter={(value: number, name: string, props: any) => {
+                                  if (name === "erroPercentual") {
+                                    return [
+                                      `${value.toFixed(1)}% (${props.payload.totalErros} erros de ${props.payload.totalTentativas} tentativas)`,
+                                      "% de Erros"
+                                    ];
+                                  }
+                                  return [value, name];
+                                }}
+                                content={({ active, payload }) => {
+                                  if (active && payload && payload.length) {
+                                    const data = payload[0].payload;
+                                    return (
+                                      <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
+                                        <p className="font-semibold text-sm mb-2">{data.conteudoCompleto}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          <span className="font-medium">Erros:</span> {data.totalErros} de {data.totalTentativas} tentativas
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                          <span className="font-medium">% de Erros:</span> {data.erroPercentual.toFixed(1)}%
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                          <span className="font-medium">Questões:</span> {data.totalQuestoes}
+                                        </p>
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                }}
+                              />
+                              <Bar 
+                                dataKey="erroPercentual" 
+                                name="% de Erros"
+                                radius={[0, 4, 4, 0]}
+                              >
+                                {(() => {
+                                  const sorted = [...(statistics.contentStats || [])]
+                                    .sort((a, b) => b.errorPercentage - a.errorPercentage)
+                                    .slice(0, 10);
+                                  
+                                  return sorted.map((entry, index) => (
+                                    <Cell 
+                                      key={`cell-${index}`} 
+                                      fill={
+                                        entry.errorPercentage >= 70 ? "#ef4444" : // Vermelho: muitos erros
+                                        entry.errorPercentage >= 50 ? "#f97316" : // Laranja: erros moderados
+                                        entry.errorPercentage >= 30 ? "#eab308" : // Amarelo: alguns erros
+                                        "#22c55e" // Verde: poucos erros
+                                      } 
+                                    />
+                                  ));
+                                })()}
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+                    )}
                   </div>
                 )}
                 {triScoresCount === 0 && (
@@ -4990,50 +5349,208 @@ export default function Home() {
               <TabsContent value="tct" className="mt-4">
                 {statistics && (
                   <div className="space-y-4" data-testid="statistics-tct-grid">
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-                      <Card data-testid="card-total-students">
-                        <CardHeader className="pb-2">
-                          <CardDescription>Total de Alunos</CardDescription>
-                          <CardTitle className="text-3xl" data-testid="text-total-students">{statistics.totalStudents}</CardTitle>
-                        </CardHeader>
-                      </Card>
-                      <Card data-testid="card-average-score">
-                        <CardHeader className="pb-2">
-                          <CardDescription>Média Geral</CardDescription>
-                          <CardTitle className="text-3xl" data-testid="text-average-score">
-                            {(() => {
-                              // Converter de porcentagem (0-100) para escala 0,0 a 10,0
-                              const tctScore = statistics.averageScore / 10;
-                              return tctScore.toFixed(1);
-                            })()}
-                          </CardTitle>
-                        </CardHeader>
-                      </Card>
-                      <Card data-testid="card-highest-score">
-                        <CardHeader className="pb-2">
-                          <CardDescription>Maior Nota</CardDescription>
-                          <CardTitle className="text-3xl text-green-600" data-testid="text-highest-score">
-                            {(() => {
-                              // Converter de porcentagem (0-100) para escala 0,0 a 10,0
-                              const tctScore = statistics.highestScore / 10;
-                              return tctScore.toFixed(1);
-                            })()}
-                          </CardTitle>
-                        </CardHeader>
-                      </Card>
-                      <Card data-testid="card-lowest-score">
-                        <CardHeader className="pb-2">
-                          <CardDescription>Menor Nota</CardDescription>
-                          <CardTitle className="text-3xl text-red-600" data-testid="text-lowest-score">
-                            {(() => {
-                              // Converter de porcentagem (0-100) para escala 0,0 a 10,0
-                              const tctScore = statistics.lowestScore / 10;
-                              return tctScore.toFixed(1);
-                            })()}
-                          </CardTitle>
-                        </CardHeader>
-                      </Card>
-                    </div>
+                    {/* Cards por Área - TCT */}
+                    {(() => {
+                      // SEMPRE mostrar as 4 áreas (LC, CH, CN, MT), independente do template
+                      const allAreas = [
+                        { area: 'LC', name: 'Linguagens', color: 'blue' },
+                        { area: 'CH', name: 'Humanas', color: 'green' },
+                        { area: 'CN', name: 'Natureza', color: 'purple' },
+                        { area: 'MT', name: 'Matemática', color: 'orange' }
+                      ];
+                      
+                      // Debug
+                      console.log('[TCT Cards] statistics.studentStats:', statistics.studentStats?.length);
+                      if (statistics.studentStats && statistics.studentStats.length > 0) {
+                        console.log('[TCT Cards] Primeiro aluno:', statistics.studentStats[0]);
+                        console.log('[TCT Cards] Primeiro aluno - LC:', statistics.studentStats[0].lc, 'CH:', statistics.studentStats[0].ch, 'CN:', statistics.studentStats[0].cn, 'MT:', statistics.studentStats[0].mt);
+                      }
+                      
+                      // SEMPRE renderizar os 4 cards, mesmo sem statistics.studentStats
+                      const areaCards = allAreas.map(({ area, name, color }) => {
+                          // Calcular notas TCT por área (escala 0-10)
+                          let areaScores: number[] = [];
+                          
+                          if (statistics.studentStats && statistics.studentStats.length > 0) {
+                            areaScores = statistics.studentStats
+                              .map(s => {
+                                const score = area === "LC" ? s.lc : area === "CH" ? s.ch : area === "CN" ? s.cn : area === "MT" ? s.mt : null;
+                                // s.lc, s.ch, etc. já estão em escala 0-100 (porcentagem), converter para 0-10
+                                return score !== null && score !== undefined ? score / 10 : null;
+                              })
+                              .filter((s): s is number => s !== null && s !== undefined);
+                            
+                            console.log(`[TCT Cards] Área ${area}: ${areaScores.length} alunos com dados`);
+                          }
+                          
+                          // Se não houver dados para esta área, ainda mostrar o card com 0
+                          if (areaScores.length === 0) {
+                            // Retornar card com valores zerados
+                            const colorClasses = {
+                              blue: {
+                                bg: 'from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900',
+                                border: 'border-blue-200 dark:border-blue-800',
+                                text: 'text-blue-700 dark:text-blue-300',
+                                bar: 'bg-blue-500',
+                                marker: 'bg-blue-600'
+                              },
+                              green: {
+                                bg: 'from-green-50 to-green-100 dark:from-green-950 dark:to-green-900',
+                                border: 'border-green-200 dark:border-green-800',
+                                text: 'text-green-700 dark:text-green-300',
+                                bar: 'bg-green-500',
+                                marker: 'bg-green-600'
+                              },
+                              purple: {
+                                bg: 'from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900',
+                                border: 'border-purple-200 dark:border-purple-800',
+                                text: 'text-purple-700 dark:text-purple-300',
+                                bar: 'bg-purple-500',
+                                marker: 'bg-purple-600'
+                              },
+                              orange: {
+                                bg: 'from-orange-50 to-orange-100 dark:from-orange-950 dark:to-orange-900',
+                                border: 'border-orange-200 dark:border-orange-800',
+                                text: 'text-orange-700 dark:text-orange-300',
+                                bar: 'bg-orange-500',
+                                marker: 'bg-orange-600'
+                              }
+                            };
+                            
+                            const colors = colorClasses[color as keyof typeof colorClasses];
+                            
+                            return (
+                              <Card key={area} className={`border-2 ${colors.border} opacity-50`}>
+                                <CardContent className="p-6">
+                                  <div className="space-y-4">
+                                    <div>
+                                      <h3 className="text-lg font-bold mb-1">{name}</h3>
+                                      <p className={`text-4xl font-bold ${colors.text}`}>0.0</p>
+                                      <p className="text-sm text-muted-foreground mt-1">TCT</p>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <div className="relative h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                        <div className={`absolute top-0 left-0 h-full ${colors.bar} opacity-30 w-full`}></div>
+                                      </div>
+                                    </div>
+                                    <div className="pt-2 border-t border-border">
+                                      <p className="text-xs font-medium text-muted-foreground mb-2">Estatísticas da Turma</p>
+                                      <div className="grid grid-cols-3 gap-2 text-xs">
+                                        <div>
+                                          <p className="text-muted-foreground">Mínimo</p>
+                                          <p className="font-bold">0.0</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-muted-foreground">Média</p>
+                                          <p className="font-bold">0.0</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-muted-foreground">Máximo</p>
+                                          <p className="font-bold">0.0</p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            );
+                          }
+                          
+                          const tctMedio = areaScores.reduce((a, b) => a + b, 0) / areaScores.length;
+                          const tctMin = Math.min(...areaScores);
+                          const tctMax = Math.max(...areaScores);
+                          
+                          // Calcular posição na barra (0-100%)
+                          const range = tctMax - tctMin;
+                          const position = range > 0 ? ((tctMedio - tctMin) / range) * 100 : 50;
+                          
+                          const colorClasses = {
+                            blue: {
+                              bg: 'from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900',
+                              border: 'border-blue-200 dark:border-blue-800',
+                              text: 'text-blue-700 dark:text-blue-300',
+                              bar: 'bg-blue-500',
+                              marker: 'bg-blue-600'
+                            },
+                            green: {
+                              bg: 'from-green-50 to-green-100 dark:from-green-950 dark:to-green-900',
+                              border: 'border-green-200 dark:border-green-800',
+                              text: 'text-green-700 dark:text-green-300',
+                              bar: 'bg-green-500',
+                              marker: 'bg-green-600'
+                            },
+                            purple: {
+                              bg: 'from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900',
+                              border: 'border-purple-200 dark:border-purple-800',
+                              text: 'text-purple-700 dark:text-purple-300',
+                              bar: 'bg-purple-500',
+                              marker: 'bg-purple-600'
+                            },
+                            orange: {
+                              bg: 'from-orange-50 to-orange-100 dark:from-orange-950 dark:to-orange-900',
+                              border: 'border-orange-200 dark:border-orange-800',
+                              text: 'text-orange-700 dark:text-orange-300',
+                              bar: 'bg-orange-500',
+                              marker: 'bg-orange-600'
+                            }
+                          };
+                          
+                          const colors = colorClasses[color as keyof typeof colorClasses];
+                          
+                          return (
+                            <Card key={area} className={`border-2 ${colors.border}`}>
+                              <CardContent className="p-6">
+                                <div className="space-y-4">
+                                  <div>
+                                    <h3 className="text-lg font-bold mb-1">{name}</h3>
+                                    <p className={`text-4xl font-bold ${colors.text}`}>{tctMedio.toFixed(1)}</p>
+                                    <p className="text-sm text-muted-foreground mt-1">TCT</p>
+                                  </div>
+                                  
+                                  {/* Barra de Progresso */}
+                                  <div className="space-y-2">
+                                    <div className="relative h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                      <div className={`absolute top-0 left-0 h-full ${colors.bar} opacity-30 w-full`}></div>
+                                      <div 
+                                        className={`absolute top-0 left-0 h-full w-1 ${colors.marker} shadow-lg`}
+                                        style={{ left: `${Math.max(0, Math.min(100, position))}%` }}
+                                      ></div>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Estatísticas de Referência */}
+                                  <div className="pt-2 border-t border-border">
+                                    <p className="text-xs font-medium text-muted-foreground mb-2">Estatísticas da Turma</p>
+                                    <div className="grid grid-cols-3 gap-2 text-xs">
+                                      <div>
+                                        <p className="text-muted-foreground">Mínimo</p>
+                                        <p className="font-bold">{tctMin.toFixed(1)}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground">Média</p>
+                                        <p className="font-bold">{tctMedio.toFixed(1)}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground">Máximo</p>
+                                        <p className="font-bold">{tctMax.toFixed(1)}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          );
+                        });
+                        
+                        console.log('[TCT Cards] Total de cards gerados:', areaCards.length);
+                        
+                        // SEMPRE retornar os 4 cards, mesmo sem dados
+                        return (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {areaCards}
+                          </div>
+                        );
+                    })()}
 
                     {/* Gráfico Min/Med/Max por Área */}
                     {(() => {

@@ -190,16 +190,18 @@ def select_template(name: Optional[str]) -> Dict:
 # ============================================================================
 
 def preprocess_pil_image(pil_img: Image.Image) -> np.ndarray:
-    """Pré-processa a imagem para OMR (grayscale, autocontrast, threshold) - otimizado."""
+    """Pré-processa a imagem para OMR (grayscale, autocontrast, threshold) - CALIBRAÇÃO ORIGINAL."""
     # Reduzir tamanho se muito grande (acelera processamento)
+    # MANTIDO EM 3000 - NÃO ALTERAR (afeta calibração)
     max_size = 3000
     if max(pil_img.size) > max_size:
         ratio = max_size / max(pil_img.size)
         new_size = (int(pil_img.width * ratio), int(pil_img.height * ratio))
+        # MANTIDO LANCZOS - NÃO ALTERAR (afeta calibração)
         pil_img = pil_img.resize(new_size, Image.Resampling.LANCZOS)
     
     gray = pil_img.convert("L")
-    # Autocontrast otimizado (cutoff menor = mais rápido)
+    # AUTOCONTRAST MANTIDO - NÃO ALTERAR (afeta calibração)
     gray = ImageOps.autocontrast(gray, cutoff=2)
     # Removido SHARPEN para melhor performance (não é crítico)
     bw = gray.point(lambda x: 0 if x < 100 else 255, '1')
@@ -412,6 +414,7 @@ def process_omr_page(
     # Log reduzido para performance
     working_image = image
     alignment_info = {"aligned": False}
+    # ALINHAMENTO MANTIDO HABILITADO - NÃO ALTERAR (afeta calibração)
     if align_marks and "registration_marks" in template:
         # Logs removidos para melhor performance
         aligned_img, info = align_with_registration_marks(image, template)
@@ -457,7 +460,7 @@ def pdf_url_to_images(pdf_url: str) -> List[np.ndarray]:
         
         try:
             from pdf2image import convert_from_bytes
-            # DPI reduzido para 150 para melhor performance (ainda mantém qualidade suficiente)
+            # DPI MANTIDO EM 150 - NÃO ALTERAR (afeta calibração)
             images = convert_from_bytes(pdf_bytes, dpi=150, thread_count=2)
             return [np.array(img) for img in images]
         except ImportError:
