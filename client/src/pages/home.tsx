@@ -2989,24 +2989,53 @@ export default function Home() {
                     <CardHeader>
                       <CardTitle className="text-base">Gabarito Oficial</CardTitle>
                       <CardDescription>
-                        Clique em uma resposta para editá-la. Os conteúdos são exibidos abaixo de cada questão.
+                        Layout de 6 colunas - leitura vertical (de cima para baixo em cada coluna). Formato idêntico ao gabarito físico.
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-4">
-                        <div className="grid grid-cols-5 sm:grid-cols-9 md:grid-cols-15 gap-2">
-                          {answerKey.map((answer, index) => (
-                            <div key={index} className="flex flex-col items-center gap-1">
-                              <span className="text-xs text-muted-foreground">{index + 1}</span>
-                              <Input
-                                value={answer != null ? String(answer) : ""}
-                                onChange={(e) => updateAnswerKeyValue(index, e.target.value)}
-                                className="h-8 w-10 text-center font-mono text-sm p-0"
-                                maxLength={1}
-                                data-testid={`input-key-${index}`}
-                              />
-                            </div>
-                          ))}
+                        {/* Layout em 6 colunas - leitura VERTICAL (igual gabarito físico) */}
+                        <div className="grid grid-cols-6 gap-4">
+                          {[0, 1, 2, 3, 4, 5].map((colIndex) => {
+                            // Calcular quantas questões por coluna (15 questões por coluna para 90 questões)
+                            const questionsPerColumn = Math.ceil(answerKey.length / 6);
+                            
+                            return (
+                              <div key={colIndex} className="space-y-2">
+                                {/* Cabeçalho da coluna */}
+                                <div className="text-center font-semibold text-sm text-muted-foreground border-b pb-2">
+                                  Col {colIndex + 1}
+                                </div>
+                                
+                                {/* Questões desta coluna (de cima para baixo) */}
+                                {Array.from({ length: questionsPerColumn }).map((_, rowIndex) => {
+                                  // Índice da questão: coluna atual + (linha * 6)
+                                  const questionIndex = colIndex + (rowIndex * 6);
+                                  
+                                  if (questionIndex >= answerKey.length) return null;
+                                  
+                                  const answer = answerKey[questionIndex];
+                                  const questionNumber = questionIndex + 1;
+                                  
+                                  return (
+                                    <div key={questionIndex} className="flex items-center gap-2 p-1 hover:bg-muted/30 rounded border border-transparent hover:border-muted">
+                                      <span className="text-xs text-muted-foreground w-6 text-right font-mono font-semibold">
+                                        {questionNumber.toString().padStart(2, '0')}
+                                      </span>
+                                      <Input
+                                        value={answer != null ? String(answer) : ""}
+                                        onChange={(e) => updateAnswerKeyValue(questionIndex, e.target.value.toUpperCase())}
+                                        className="h-9 w-12 text-center font-bold text-lg p-0 uppercase"
+                                        maxLength={1}
+                                        data-testid={`input-key-${questionIndex}`}
+                                        placeholder="?"
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
                         </div>
                         
                         {questionContents.length > 0 && questionContents.some(c => c.content.trim()) && (
