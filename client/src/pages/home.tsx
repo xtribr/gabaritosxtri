@@ -3289,33 +3289,36 @@ export default function Home() {
 
                     {/* Gráfico Radar por Área (se ENEM) */}
                     {(() => {
-                      const areas = getAreasByTemplate(selectedTemplate.name, numQuestions);
-                      if (areas.length > 0) {
-                        const areaTriData = areas.map(({ area }) => {
-                          const studentsForArea = studentsWithScores
-                            .map(student => {
-                              const triScore = triScores.get(student.id);
-                              return triScore || 0;
-                            })
-                            .filter(s => s > 0);
+                      // Usar triScoresByArea para ter dados reais por área
+                      if (triScoresByArea.size > 0) {
+                        const areas = ['LC', 'CH', 'CN', 'MT'];
+                        const areaTriData = areas.map(area => {
+                          const studentsForArea = Array.from(triScoresByArea.values())
+                            .map(areaScores => areaScores[area])
+                            .filter((score): score is number => score !== undefined && score > 0);
+                          
                           const avg = studentsForArea.length > 0 
                             ? studentsForArea.reduce((a, b) => a + b, 0) / studentsForArea.length 
                             : 0;
-                          return { area, value: avg };
+                          
+                          return { area, value: avg, count: studentsForArea.length };
                         });
 
-                        if (areaTriData.some(d => d.value > 0)) {
+                        // Mostrar apenas áreas que têm dados
+                        const areaTriDataFiltered = areaTriData.filter(d => d.value > 0);
+
+                        if (areaTriDataFiltered.length > 0) {
                           return (
                             <Card>
                               <CardHeader>
                                 <CardTitle className="text-base">Radar: TRI por Área</CardTitle>
                                 <CardDescription>
-                                  Média TRI por área de conhecimento
+                                  Média TRI por área de conhecimento ({areaTriDataFiltered.length} área(s) calculada(s))
                                 </CardDescription>
                               </CardHeader>
                               <CardContent>
                                 <ResponsiveContainer width="100%" height={400}>
-                                  <RadarChart data={areaTriData}>
+                                  <RadarChart data={areaTriDataFiltered}>
                                     <PolarGrid />
                                     <PolarAngleAxis dataKey="area" tick={{ fontSize: 12 }} />
                                     <PolarRadiusAxis angle={90} domain={[0, 1000]} tick={{ fontSize: 10 }} />
@@ -3327,7 +3330,10 @@ export default function Home() {
                                       fillOpacity={0.6} 
                                     />
                                     <RechartsTooltip 
-                                      formatter={(value: number) => [value.toFixed(1), "TRI"]}
+                                      formatter={(value: number, name, props) => [
+                                        `${value.toFixed(1)} (${props.payload.count} aluno(s))`, 
+                                        "TRI Médio"
+                                      ]}
                                     />
                                   </RadarChart>
                                 </ResponsiveContainer>
