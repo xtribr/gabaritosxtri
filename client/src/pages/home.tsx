@@ -2678,12 +2678,8 @@ export default function Home() {
                           <TableHead className="min-w-[100px] font-semibold text-xs uppercase tracking-wide">Turma</TableHead>
                           <TableHead className="min-w-[350px] font-semibold text-xs uppercase tracking-wide">Respostas</TableHead>
                           {answerKey.length > 0 && (
-                            <>
-                              <TableHead className="w-24 text-center font-semibold text-xs uppercase tracking-wide">Acertos</TableHead>
-                              <TableHead className="w-24 text-center font-semibold text-xs uppercase tracking-wide">Nota</TableHead>
-                            </>
+                            <TableHead className="w-24 text-center font-semibold text-xs uppercase tracking-wide">Acertos</TableHead>
                           )}
-                          <TableHead className="w-24 text-center font-semibold text-xs uppercase tracking-wide">Confiança</TableHead>
                           <TableHead className="w-20 text-center font-semibold text-xs uppercase tracking-wide">Pág</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -2775,34 +2771,12 @@ export default function Home() {
                               </div>
                             </TableCell>
                             {answerKey.length > 0 && (
-                              <>
-                                <TableCell className="text-center h-12">
-                                  <Badge variant={student.correctAnswers && student.correctAnswers >= answerKey.length * 0.6 ? "default" : "secondary"}>
-                                    {student.correctAnswers || 0}/{answerKey.length}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-center h-12">
-                                  <span className={`font-semibold ${
-                                    (student.score || 0) >= 60 ? "text-green-600" : "text-red-600"
-                                  }`}>
-                                    {student.score?.toFixed(1) || 0}%
-                                  </span>
-                                </TableCell>
-                              </>
-                            )}
-                            <TableCell className="text-center h-12">
-                              {student.confidence !== undefined ? (
-                                <Badge 
-                                  variant={student.confidence >= 80 ? "default" : student.confidence >= 60 ? "secondary" : "destructive"}
-                                  className="text-xs"
-                                  data-testid={`badge-confidence-${index}`}
-                                >
-                                  {Math.round(student.confidence)}%
+                              <TableCell className="text-center h-12">
+                                <Badge variant={student.correctAnswers && student.correctAnswers >= answerKey.length * 0.6 ? "default" : "secondary"}>
+                                  {student.correctAnswers || 0}/{answerKey.length}
                                 </Badge>
-                              ) : (
-                                <Badge variant="outline" className="text-xs">N/A</Badge>
-                              )}
-                            </TableCell>
+                              </TableCell>
+                            )}
                             <TableCell className="text-center h-12">
                               <Badge variant="outline" className="text-xs">
                                 {student.pageNumber}
