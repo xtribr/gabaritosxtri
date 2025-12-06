@@ -1357,9 +1357,8 @@ export async function registerRoutes(
       const triAvailable = await checkPythonTRIService();
       if (!triAvailable) {
         res.status(503).json({ 
-          error: "Serviço TRI V2 offline",
-          details: `O serviço Python TRI não está respondendo em ${PYTHON_TRI_SERVICE_URL}`,
-          fallback: "Use /api/calculate-tri para o algoritmo TRI V1 (lookup table)"
+          error: "Serviço TRI offline",
+          details: `O serviço Python TRI não está respondendo em ${PYTHON_TRI_SERVICE_URL}`
         });
         return;
       }
@@ -1376,8 +1375,7 @@ export async function registerRoutes(
       res.status(500).json({
         error: "Erro ao calcular TRI V2",
         details: error.message || "Erro desconhecido",
-        stack: error.stack,
-        fallback: "Use /api/calculate-tri para o algoritmo TRI V1 (lookup table)"
+        stack: error.stack
       });
     }
   });

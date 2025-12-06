@@ -91,7 +91,6 @@ export default function Home() {
   const [triScores, setTriScores] = useState<Map<string, number>>(new Map()); // Map<studentId, triScore> - média geral
   const [triScoresByArea, setTriScoresByArea] = useState<Map<string, Record<string, number>>>(new Map()); // Map<studentId, {LC: number, CH: number, CN: number, MT: number}>
   const [triScoresCount, setTriScoresCount] = useState<number>(0); // Contador para forçar atualização do React
-  const [triVersion, setTriVersion] = useState<"v1" | "v2">("v1"); // Versão do algoritmo TRI: v1 (lookup) ou v2 (coerência pedagógica)
   const [triV2Loading, setTriV2Loading] = useState<boolean>(false); // Loading do cálculo TRI V2
   const [triV2Results, setTriV2Results] = useState<any>(null); // Resultados completos do TRI V2
   const [mainActiveTab, setMainActiveTab] = useState<string>("alunos"); // Aba principal: alunos, gabarito, tri, tct, conteudos
@@ -781,6 +780,93 @@ export default function Home() {
       toast({
         title: "Erro na exportação",
         description: errorMessage,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleExportScannedAnswers = () => {
+    if (students.length === 0) {
+      toast({
+        title: "Nenhum dado",
+        description: "Processe um PDF primeiro para exportar as respostas escaneadas.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Criar workbook
+      const wb = XLSX.utils.book_new();
+
+      // Obter o número máximo de questões
+      const maxQuestions = Math.max(
+        ...students.map(s => Object.keys(s.answers || {}).length),
+        0
+      );
+
+      // Criar headers: #, MATRICULA, NOME, TURMA, Q1, Q2, Q3...
+      const headers = ['#', 'MATRICULA', 'NOME', 'TURMA'];
+
+      // Adicionar colunas de questões
+      for (let i = 1; i <= maxQuestions; i++) {
+        headers.push(`Q${i}`);
+      }
+
+      // Criar dados
+      const data = [headers];
+      
+      students.forEach((student, index) => {
+        const row: any[] = [
+          index + 1,                 // # (número de ordem)
+          student.studentNumber || '', // MATRICULA
+          student.studentName || '',   // NOME
+          student.turma || ''          // TURMA
+        ];
+
+        // Adicionar respostas
+        for (let i = 1; i <= maxQuestions; i++) {
+          const answer = student.answers?.[i.toString()] || '';
+          row.push(answer);
+        }
+
+        data.push(row);
+      });
+
+      // Criar worksheet
+      const ws = XLSX.utils.aoa_to_sheet(data);
+
+      // Configurar largura das colunas
+      const colWidths = [
+        { wch: 5 },  // #
+        { wch: 15 }, // MATRICULA
+        { wch: 30 }, // NOME
+        { wch: 15 }, // TURMA
+      ];
+
+      // Questões com largura menor
+      for (let i = 0; i < maxQuestions; i++) {
+        colWidths.push({ wch: 5 });
+      }
+
+      ws['!cols'] = colWidths;
+
+      // Adicionar worksheet ao workbook
+      XLSX.utils.book_append_sheet(wb, ws, 'Gabaritos');
+
+      // Gerar e baixar arquivo
+      const fileName = `gabaritos_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+
+      toast({
+        title: "Exportação concluída",
+        description: `${students.length} aluno(s) exportado(s) com ${maxQuestions} questões.`,
+      });
+    } catch (error) {
+      console.error("Error exporting scanned answers:", error);
+      toast({
+        title: "Erro na exportação",
+        description: "Não foi possível exportar as respostas escaneadas.",
         variant: "destructive",
       });
     }
@@ -2036,9 +2122,12 @@ export default function Home() {
             <div className="p-2 rounded-md bg-primary/10">
               <FileSpreadsheet className="h-6 w-6 text-primary" />
             </div>
-            <h1 className="text-xl font-semibold" data-testid="text-app-title">
-              GabaritAI
-            </h1>
+            <div className="flex flex-col">
+              <h1 className="text-xl font-semibold" data-testid="text-app-title">
+                GabaritAI
+              </h1>
+              <p className="text-xs text-muted-foreground">Powered by X-TRI</p>
+            </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {mounted && (
@@ -2354,6 +2443,10 @@ export default function Home() {
                 <Button onClick={handleExportExcel} data-testid="button-export-excel">
                   <Download className="h-4 w-4 mr-2" />
                   Exportar para Excel
+                </Button>
+                <Button onClick={handleExportScannedAnswers} variant="outline" data-testid="button-export-scanned">
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Exportar Gabaritos
                 </Button>
               </>
             )}
@@ -3295,120 +3388,58 @@ export default function Home() {
                 <Card className="mb-4 border-purple-200 dark:border-purple-800">
                   <CardHeader>
                     <CardTitle className="text-base flex items-center gap-2">
-                      <Calculator className="h-5 w-5 text-purple-600" />
-                      Configuração TRI
+                      <Target className="h-5 w-5 text-purple-600" />
+                      Cálculo TRI - Coerência Pedagógica
                     </CardTitle>
                     <CardDescription>
-                      Escolha o algoritmo de cálculo TRI e execute o processamento
+                      Análise estatística avançada com detecção de padrões e coerência pedagógica
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {/* Seletor de Versão TRI */}
-                      <div className="flex items-center gap-4">
-                        <Label htmlFor="tri-version" className="text-sm font-medium min-w-[120px]">
-                          Algoritmo TRI:
-                        </Label>
-                        <Select value={triVersion} onValueChange={(value: "v1" | "v2") => setTriVersion(value)}>
-                          <SelectTrigger id="tri-version" className="w-[300px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="v1">
-                              <div className="flex flex-col items-start">
-                                <span className="font-medium">TRI V1 - Lookup Table</span>
-                                <span className="text-xs text-muted-foreground">Baseado em tabela histórica ENEM 2009-2023</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="v2">
-                              <div className="flex flex-col items-start">
-                                <span className="font-medium">TRI V2 - Coerência Pedagógica</span>
-                                <span className="text-xs text-muted-foreground">Análise estatística avançada com detecção de padrões</span>
-                              </div>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Descrição do Algoritmo Selecionado */}
-                      <div className="bg-muted/50 rounded-lg p-3 text-sm">
-                        {triVersion === "v1" ? (
-                          <div className="space-y-2">
-                            <p className="font-medium text-blue-600 dark:text-blue-400">📊 TRI V1 - Lookup Table</p>
-                            <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                              <li>Usa tabela histórica do ENEM (2009-2023)</li>
-                              <li>Cálculo baseado em coerência de respostas</li>
-                              <li>Interpolação entre valores mínimos e máximos</li>
-                              <li>Rápido e confiável para provas padrão ENEM</li>
-                            </ul>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            <p className="font-medium text-purple-600 dark:text-purple-400">🎯 TRI V2 - Coerência Pedagógica</p>
-                            <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                              <li>Análise de coerência pedagógica avançada</li>
-                              <li>Detecção de padrão inverso (acerta difíceis, erra fáceis)</li>
-                              <li>Ajustes por concordância prova-aluno (±30%)</li>
-                              <li>Penalidades por inconsistência (-60 pts)</li>
-                              <li>Range TRI: 300-900 pontos</li>
-                            </ul>
-                          </div>
-                        )}
+                      {/* Descrição do Algoritmo */}
+                      <div className="bg-purple-50 dark:bg-purple-950/50 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
+                        <div className="space-y-2">
+                          <p className="font-semibold text-purple-600 dark:text-purple-400 flex items-center gap-2">
+                            <Target className="h-4 w-4" />
+                            Algoritmo TRI - Coerência Pedagógica
+                          </p>
+                          <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                            <li>Análise de coerência pedagógica avançada</li>
+                            <li>Detecção de padrão inverso (acerta difíceis, erra fáceis)</li>
+                            <li>Ajustes por concordância prova-aluno (±30%)</li>
+                            <li>Penalidades por inconsistência (-60 pts)</li>
+                            <li>Range TRI: 300-900 pontos</li>
+                          </ul>
+                        </div>
                       </div>
 
                       {/* Botão de Calcular */}
-                      <div className="flex gap-2">
-                        {triVersion === "v1" ? (
-                          <Button
-                            onClick={async () => {
-                              if (selectedTemplate.name.includes("ENEM")) {
-                                await calculateTRIForAllAreas([
-                                  { area: "LC", start: 1, end: 45 },
-                                  { area: "CH", start: 46, end: 90 },
-                                  { area: "CN", start: 91, end: 135 },
-                                  { area: "MT", start: 136, end: 180 },
-                                ], 2023, answerKey);
-                              } else {
-                                toast({
-                                  title: "Template não suportado",
-                                  description: "TRI V1 está disponível apenas para templates ENEM",
-                                  variant: "destructive",
-                                });
-                              }
-                            }}
-                            disabled={studentsWithScores.length === 0 || answerKey.length === 0}
-                            className="flex-1"
-                          >
-                            <Calculator className="h-4 w-4 mr-2" />
-                            Calcular TRI V1 (Lookup)
-                          </Button>
+                      <Button
+                        onClick={() => calculateTRIV2(answerKey)}
+                        disabled={triV2Loading || studentsWithScores.length === 0 || answerKey.length === 0}
+                        className="w-full bg-purple-600 hover:bg-purple-700"
+                        size="lg"
+                      >
+                        {triV2Loading ? (
+                          <>
+                            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                            Calculando TRI (Coerência Pedagógica)...
+                          </>
                         ) : (
-                          <Button
-                            onClick={() => calculateTRIV2(answerKey)}
-                            disabled={triV2Loading || studentsWithScores.length === 0 || answerKey.length === 0}
-                            className="flex-1 bg-purple-600 hover:bg-purple-700"
-                          >
-                            {triV2Loading ? (
-                              <>
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                Calculando TRI V2...
-                              </>
-                            ) : (
-                              <>
-                                <Target className="h-4 w-4 mr-2" />
-                                Calcular TRI V2 (Coerência Pedagógica)
-                              </>
-                            )}
-                          </Button>
+                          <>
+                            <Target className="h-5 w-5 mr-2" />
+                            Calcular TRI V2 (Coerência Pedagógica)
+                          </>
                         )}
-                      </div>
+                      </Button>
 
-                      {/* Status e Info */}
+                      {/* Status */}
                       {triScoresCount > 0 && (
-                        <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                        <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/50 rounded-lg p-3 border border-green-200 dark:border-green-800">
                           <CheckCircle className="h-4 w-4" />
                           <span>
-                            TRI calculado para {triScoresCount} alunos usando {triVersion === "v1" ? "Lookup Table" : "Coerência Pedagógica"}
+                            TRI calculado para {triScoresCount} alunos usando Coerência Pedagógica
                           </span>
                         </div>
                       )}

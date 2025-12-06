@@ -4,7 +4,7 @@
 
 **O que foi feito:**
 - ✅ Backend Express integrado com Python TRI V2 Service
-- ✅ Frontend React com seletor de versão TRI (V1/V2)
+- ✅ Frontend React com interface TRI otimizada
 - ✅ Scripts de inicialização automática
 - ✅ Documentação completa
 
@@ -42,22 +42,14 @@ Isso vai iniciar:
 
 4. **Calcular TRI:**
    - Vá na aba "TRI"
-   - Escolha:
-     - **TRI V1**: Rápido, baseado em tabela histórica
-     - **TRI V2**: Análise avançada com coerência pedagógica
-   - Clique em "Calcular TRI"
-   - Veja resultados: notas, gráficos, análise
+   - Clique em "Calcular TRI V2 (Coerência Pedagógica)"
+   - Veja resultados: notas, gráficos, análise de coerência
 
 ---
 
-## 📊 Diferenças TRI V1 vs V2
+## 📊 Sobre o Cálculo TRI
 
-**TRI V1 (Lookup Table):**
-- ⚡ Rápido (< 1 segundo)
-- Baseado em tabela ENEM 2009-2023
-- Boa precisão
-
-**TRI V2 (Coerência Pedagógica):**
+**TRI (Coerência Pedagógica):**
 - 🎯 Mais preciso
 - Análise estatística avançada
 - Detecta padrão inverso

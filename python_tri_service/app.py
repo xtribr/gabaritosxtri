@@ -14,7 +14,7 @@ import numpy as np
 
 # Importar motor TRI V2 da pasta data
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'data', 'tri_v2_producao'))
-from tri_v2_producao import ProcessadorTRICompleto
+from tri_v2_producao import ProcessadorTRICompleto, TabelaReferenciaTRI
 
 app = Flask(__name__)
 CORS(app)
@@ -38,15 +38,13 @@ app.json_encoder = NumpyEncoder
 
 TABELA_TRI_PATH = os.path.join(
     os.path.dirname(__file__),
-    '..',
-    'data',
-    'tri_v2_producao',
-    'tabela_tri_referencia.xlsx'
+    'tri_tabela_referencia_oficial.csv'
 )
 
 # Instanciar processador (carrega tabela UMA VEZ)
 try:
-    processador = ProcessadorTRICompleto(TABELA_TRI_PATH)
+    tabela_referencia = TabelaReferenciaTRI(TABELA_TRI_PATH)
+    processador = ProcessadorTRICompleto(tabela_referencia)
     print(f"✅ Processador TRI V2 inicializado com tabela: {TABELA_TRI_PATH}")
 except Exception as e:
     print(f"❌ ERRO ao carregar tabela TRI: {e}")

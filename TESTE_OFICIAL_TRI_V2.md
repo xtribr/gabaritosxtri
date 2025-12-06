@@ -210,26 +210,6 @@ cd python_tri_service
 }
 ```
 
-### TRI V1 (Atual - Lookup Table)
-
-**POST** `/api/calculate-tri`
-
-Body original (students, area, ano, questionStats, answerKey)
-
----
-
-## 📊 Diferenças TRI V1 vs TRI V2
-
-| Aspecto | TRI V1 (Lookup) | TRI V2 (Coerência Pedagógica) |
-|---------|-----------------|-------------------------------|
-| **Algoritmo** | Interpolação em tabela histórica ENEM 2009-2023 | Análise estatística avançada com coerência |
-| **Entrada** | Área + Ano + Acertos | Respostas individuais + Gabarito + Dificuldades |
-| **Coerência** | Score Real / Score Ideal | Taxa de acerto por nível de dificuldade |
-| **Ajustes** | ±50% por coerência | Coerência (±50%) + Relação Prova-Aluno (±30%) + Penalidades (-60 padrão inverso) |
-| **Análise Prova** | ❌ Não | ✅ Distribuição de dificuldades e padrões esperados |
-| **Penalidades** | ❌ Não | ✅ Detecta padrão inverso (acerta difíceis, erra fáceis) |
-| **Output** | TRI score numérico | TRI + análise detalhada + coerência + concordância |
-
 ---
 
 ## 🎯 Cenários de Teste
@@ -322,8 +302,7 @@ tail -f /tmp/express_backend.log
 
 ## 📚 Documentação de Referência
 
-- **TRI V1**: `/server/src/calculations/triCalculator.ts`
-- **TRI V2**: `/data/tri_v2_producao/tri_v2_producao.py`
+- **TRI**: `/data/tri_v2_producao/tri_v2_producao.py`
 - **Serviço Python TRI**: `/python_tri_service/README.md`
 - **Integração Backend**: `/server/routes.ts` (linhas 1308-1355)
 

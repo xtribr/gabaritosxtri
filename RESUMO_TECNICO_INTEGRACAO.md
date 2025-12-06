@@ -42,7 +42,6 @@ app.post("/api/calculate-tri-v2", async (req, res) => {
 
 **Estados Adicionados (linhas 91-96):**
 ```typescript
-const [triVersion, setTriVersion] = useState<"v1" | "v2">("v1");
 const [triV2Loading, setTriV2Loading] = useState<boolean>(false);
 const [triV2Results, setTriV2Results] = useState<any>(null);
 ```
@@ -84,13 +83,9 @@ const calculateTRIV2 = async (currentAnswerKey?: string[]): Promise<void> => {
 **Interface TRI (linhas 3293-3400):**
 ```typescript
 <Card>
-  <CardHeader>Configuração TRI</CardHeader>
+  <CardHeader>Cálculo TRI - Coerência Pedagógica</CardHeader>
   <CardContent>
-    {/* Seletor V1/V2 */}
-    <Select value={triVersion} onValueChange={setTriVersion}>
-      <SelectItem value="v1">TRI V1 - Lookup Table</SelectItem>
-      <SelectItem value="v2">TRI V2 - Coerência Pedagógica</SelectItem>
-    </Select>
+    {/* Interface focada apenas em TRI com Coerência Pedagógica */}
 
     {/* Botão Calcular */}
     <Button onClick={() => calculateTRIV2(answerKey)}>
@@ -210,7 +205,6 @@ Frontend React
 - `USE_PYTHON_TRI`: true
 
 ### Frontend
-- `triVersion`: "v1" | "v2" (seletor de algoritmo)
 - `triV2Loading`: boolean (loading estado)
 - `triV2Results`: any (resultado completo do Python)
 - `triScores`: Map<studentId, triTotal>
@@ -253,7 +247,6 @@ lucide-react (ícones)
 - ✅ Função callPythonTRI() chama API corretamente
 
 **Frontend:**
-- ✅ Seletor TRI V1/V2 funciona
 - ✅ Botão "Calcular TRI V2" chama calculateTRIV2()
 - ✅ Loading state funciona
 - ✅ Resultados aparecem na tabela

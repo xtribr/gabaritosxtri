@@ -43,31 +43,28 @@ Este script vai:
 
 ### Passo 3: Calcular TRI
 1. Vá na aba **"TRI"**
-2. Escolha o algoritmo:
-   - **TRI V1 - Lookup Table**: Baseado em tabela histórica ENEM 2009-2023
-   - **TRI V2 - Coerência Pedagógica**: Análise avançada com detecção de padrões
-3. Clique em **"Calcular TRI"**
-4. Veja os resultados:
+2. Clique em **"Calcular TRI V2 (Coerência Pedagógica)"**
+3. Veja os resultados:
    - Nota TRI total (300-900)
    - Nota TRI por área (LC, CH, CN, MT)
    - Gráficos de dispersão
-   - Análise de coerência
+   - Análise de coerência detalhada
 
 ---
 
-## 🎨 Diferenças entre TRI V1 e TRI V2
+## 🎨 Características do Algoritmo TRI
 
-| Aspecto | TRI V1 (Lookup) | TRI V2 (Coerência Pedagógica) |
-|---------|-----------------|-------------------------------|
-| **Algoritmo** | Interpolação em tabela histórica ENEM | Análise estatística avançada |
-| **Entrada** | Área + Ano + Acertos | Respostas individuais + Gabarito |
-| **Coerência** | Score Real / Score Ideal | Taxa de acerto por dificuldade |
-| **Ajustes** | ±50% por coerência | Coerência (±50%) + Relação (±30%) + Penalidades (-60) |
-| **Análise Prova** | ❌ Não | ✅ Distribuição de dificuldades |
-| **Penalidades** | ❌ Não | ✅ Detecta padrão inverso |
-| **Output** | TRI score | TRI + análise detalhada |
-| **Velocidade** | ⚡ Muito rápido | 🐢 Mais lento (2-3 segundos) |
-| **Precisão** | ⭐⭐⭐ Boa | ⭐⭐⭐⭐⭐ Excelente |
+| Aspecto | Detalhes |
+|---------|----------|
+| **Algoritmo** | Análise estatística avançada com Coerência Pedagógica |
+| **Entrada** | Respostas individuais + Gabarito |
+| **Coerência** | Taxa de acerto por nível de dificuldade |
+| **Ajustes** | Coerência (±50%) + Relação Prova-Aluno (±30%) + Penalidades (-60) |
+| **Análise Prova** | ✅ Distribuição de dificuldades |
+| **Penalidades** | ✅ Detecta padrão inverso (acerta difíceis, erra fáceis) |
+| **Output** | TRI + análise detalhada de coerência e concordância |
+| **Velocidade** | Moderado (2-3 segundos) |
+| **Precisão** | ⭐⭐⭐⭐⭐ Excelente |
 
 ---
 
@@ -211,7 +208,6 @@ gabaritosxtri/
 - [x] Express backend responde em http://localhost:8080
 - [x] Frontend abre em http://localhost:5173
 - [x] Endpoint `/api/calculate-tri-v2` retorna resultado válido
-- [x] Frontend possui seletor de versão TRI (V1/V2)
 - [x] Botão "Calcular TRI V2" funciona
 - [x] Resultados aparecem na tabela de alunos
 - [x] Gráficos exibem dados corretos
