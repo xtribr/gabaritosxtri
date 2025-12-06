@@ -91,6 +91,9 @@ export default function Home() {
   const [triScores, setTriScores] = useState<Map<string, number>>(new Map()); // Map<studentId, triScore> - média geral
   const [triScoresByArea, setTriScoresByArea] = useState<Map<string, Record<string, number>>>(new Map()); // Map<studentId, {LC: number, CH: number, CN: number, MT: number}>
   const [triScoresCount, setTriScoresCount] = useState<number>(0); // Contador para forçar atualização do React
+  const [triVersion, setTriVersion] = useState<"v1" | "v2">("v1"); // Versão do algoritmo TRI: v1 (lookup) ou v2 (coerência pedagógica)
+  const [triV2Loading, setTriV2Loading] = useState<boolean>(false); // Loading do cálculo TRI V2
+  const [triV2Results, setTriV2Results] = useState<any>(null); // Resultados completos do TRI V2
   const [mainActiveTab, setMainActiveTab] = useState<string>("alunos"); // Aba principal: alunos, gabarito, tri, tct, conteudos
   const [aiAnalysis, setAiAnalysis] = useState<string>(""); // Análise gerada pela IA
   const [aiAnalysisLoading, setAiAnalysisLoading] = useState<boolean>(false); // Loading da análise IA
@@ -1009,6 +1012,140 @@ export default function Home() {
       }
       return newQueue;
     });
+  };
+
+  // Função para calcular TRI V2 (Coerência Pedagógica) via Python Service
+  const calculateTRIV2 = async (currentAnswerKey?: string[]): Promise<void> => {
+    const answerKeyToUse = currentAnswerKey || answerKey;
+    
+    if (studentsWithScores.length === 0 || answerKeyToUse.length === 0) {
+      toast({
+        title: "Erro",
+        description: "Necessário ter alunos e gabarito cadastrados",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setTriV2Loading(true);
+    console.log("[TRI V2] Iniciando cálculo para", studentsWithScores.length, "alunos");
+
+    try {
+      // Preparar dados para o TRI V2
+      const alunos = studentsWithScores.map(student => {
+        const alunoData: Record<string, string> = {
+          nome: student.name || student.id,
+        };
+        
+        // Adicionar respostas (q1, q2, q3, ...)
+        student.answers.forEach((answer, idx) => {
+          alunoData[`q${idx + 1}`] = answer || "X"; // X para questões não respondidas
+        });
+        
+        return alunoData;
+      });
+
+      // Criar gabarito como objeto {"1": "A", "2": "B", ...}
+      const gabarito: Record<string, string> = {};
+      answerKeyToUse.forEach((answer, idx) => {
+        gabarito[String(idx + 1)] = answer;
+      });
+
+      // Configuração de áreas (padrão ENEM)
+      const areas_config = {
+        "Linguagens e Códigos": [1, 45],
+        "Ciências Humanas": [46, 90],
+        "Ciências da Natureza": [91, 135],
+        "Matemática": [136, 180],
+      };
+
+      console.log("[TRI V2] Enviando requisição:", {
+        total_alunos: alunos.length,
+        total_questoes: answerKeyToUse.length,
+        areas: Object.keys(areas_config),
+      });
+
+      const response = await fetch("/api/calculate-tri-v2", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          alunos,
+          gabarito,
+          areas_config,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.details || error.error || "Erro ao calcular TRI V2");
+      }
+
+      const data = await response.json();
+      console.log("[TRI V2] Resultado recebido:", data);
+
+      // Processar resultados
+      if (data.status === "sucesso" && data.resultados) {
+        setTriV2Results(data);
+
+        // Converter resultados para o formato esperado pelo sistema
+        const triScoresMap = new Map<string, number>();
+        const triScoresByAreaMap = new Map<string, Record<string, number>>();
+
+        data.resultados.forEach((resultado: any, index: number) => {
+          const student = studentsWithScores[index];
+          if (!student) return;
+
+          // TRI total
+          const triTotal = resultado.tri_geral?.tri_ajustado || 0;
+          triScoresMap.set(student.id, triTotal);
+
+          // TRI por área
+          const areaScores: Record<string, number> = {};
+          if (resultado.areas) {
+            Object.entries(resultado.areas).forEach(([areaName, areaData]: [string, any]) => {
+              if (areaData.tri?.tri_ajustado) {
+                // Mapear nomes para siglas
+                const siglas: Record<string, string> = {
+                  "Linguagens e Códigos": "LC",
+                  "Ciências Humanas": "CH",
+                  "Ciências da Natureza": "CN",
+                  "Matemática": "MT",
+                };
+                const sigla = siglas[areaName] || areaName;
+                areaScores[sigla] = areaData.tri.tri_ajustado;
+              }
+            });
+          }
+          triScoresByAreaMap.set(student.id, areaScores);
+        });
+
+        setTriScores(triScoresMap);
+        setTriScoresByArea(triScoresByAreaMap);
+        setTriScoresCount(triScoresMap.size);
+
+        toast({
+          title: "TRI V2 Calculado!",
+          description: `${triScoresMap.size} alunos processados com sucesso usando Coerência Pedagógica`,
+        });
+
+        console.log("[TRI V2] Scores salvos:", {
+          total: triScoresMap.size,
+          scores: Array.from(triScoresMap.entries()).slice(0, 3),
+          areas: Array.from(triScoresByAreaMap.entries()).slice(0, 3),
+        });
+      }
+    } catch (error: any) {
+      console.error("[TRI V2] Erro:", error);
+      toast({
+        title: "Erro ao calcular TRI V2",
+        description: error.message || "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setTriV2Loading(false);
+    }
   };
 
   // Função para calcular TRI automaticamente para todas as áreas
@@ -3154,6 +3291,131 @@ export default function Home() {
 
               {/* ABA 3: ESTATISTICAS TRI */}
               <TabsContent value="tri" className="mt-4">
+                {/* Card de Controle TRI */}
+                <Card className="mb-4 border-purple-200 dark:border-purple-800">
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Calculator className="h-5 w-5 text-purple-600" />
+                      Configuração TRI
+                    </CardTitle>
+                    <CardDescription>
+                      Escolha o algoritmo de cálculo TRI e execute o processamento
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {/* Seletor de Versão TRI */}
+                      <div className="flex items-center gap-4">
+                        <Label htmlFor="tri-version" className="text-sm font-medium min-w-[120px]">
+                          Algoritmo TRI:
+                        </Label>
+                        <Select value={triVersion} onValueChange={(value: "v1" | "v2") => setTriVersion(value)}>
+                          <SelectTrigger id="tri-version" className="w-[300px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="v1">
+                              <div className="flex flex-col items-start">
+                                <span className="font-medium">TRI V1 - Lookup Table</span>
+                                <span className="text-xs text-muted-foreground">Baseado em tabela histórica ENEM 2009-2023</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="v2">
+                              <div className="flex flex-col items-start">
+                                <span className="font-medium">TRI V2 - Coerência Pedagógica</span>
+                                <span className="text-xs text-muted-foreground">Análise estatística avançada com detecção de padrões</span>
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Descrição do Algoritmo Selecionado */}
+                      <div className="bg-muted/50 rounded-lg p-3 text-sm">
+                        {triVersion === "v1" ? (
+                          <div className="space-y-2">
+                            <p className="font-medium text-blue-600 dark:text-blue-400">📊 TRI V1 - Lookup Table</p>
+                            <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                              <li>Usa tabela histórica do ENEM (2009-2023)</li>
+                              <li>Cálculo baseado em coerência de respostas</li>
+                              <li>Interpolação entre valores mínimos e máximos</li>
+                              <li>Rápido e confiável para provas padrão ENEM</li>
+                            </ul>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="font-medium text-purple-600 dark:text-purple-400">🎯 TRI V2 - Coerência Pedagógica</p>
+                            <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                              <li>Análise de coerência pedagógica avançada</li>
+                              <li>Detecção de padrão inverso (acerta difíceis, erra fáceis)</li>
+                              <li>Ajustes por concordância prova-aluno (±30%)</li>
+                              <li>Penalidades por inconsistência (-60 pts)</li>
+                              <li>Range TRI: 300-900 pontos</li>
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Botão de Calcular */}
+                      <div className="flex gap-2">
+                        {triVersion === "v1" ? (
+                          <Button
+                            onClick={async () => {
+                              if (selectedTemplate.name.includes("ENEM")) {
+                                await calculateTRIForAllAreas([
+                                  { area: "LC", start: 1, end: 45 },
+                                  { area: "CH", start: 46, end: 90 },
+                                  { area: "CN", start: 91, end: 135 },
+                                  { area: "MT", start: 136, end: 180 },
+                                ], 2023, answerKey);
+                              } else {
+                                toast({
+                                  title: "Template não suportado",
+                                  description: "TRI V1 está disponível apenas para templates ENEM",
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                            disabled={studentsWithScores.length === 0 || answerKey.length === 0}
+                            className="flex-1"
+                          >
+                            <Calculator className="h-4 w-4 mr-2" />
+                            Calcular TRI V1 (Lookup)
+                          </Button>
+                        ) : (
+                          <Button
+                            onClick={() => calculateTRIV2(answerKey)}
+                            disabled={triV2Loading || studentsWithScores.length === 0 || answerKey.length === 0}
+                            className="flex-1 bg-purple-600 hover:bg-purple-700"
+                          >
+                            {triV2Loading ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Calculando TRI V2...
+                              </>
+                            ) : (
+                              <>
+                                <Target className="h-4 w-4 mr-2" />
+                                Calcular TRI V2 (Coerência Pedagógica)
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Status e Info */}
+                      {triScoresCount > 0 && (
+                        <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                          <CheckCircle className="h-4 w-4" />
+                          <span>
+                            TRI calculado para {triScoresCount} alunos usando {triVersion === "v1" ? "Lookup Table" : "Coerência Pedagógica"}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
                 {triScoresCount > 0 && triScores.size > 0 && (
                   <div className="space-y-4" data-testid="statistics-tri-grid">
                     {/* Card de Resumo TRI */}

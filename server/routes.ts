@@ -16,9 +16,11 @@ import { callChatGPTVisionOMR } from "./chatgptOMR.js";
 import { registerDebugRoutes } from "./debugRoutes.js";
 import { gerarAnaliseDetalhada } from "./conteudosLoader.js";
 
-// Configuração do serviço Python OMR
+// Configuração dos serviços Python
 const PYTHON_OMR_SERVICE_URL = process.env.PYTHON_OMR_URL || "http://localhost:5002";
+const PYTHON_TRI_SERVICE_URL = process.env.PYTHON_TRI_URL || "http://localhost:5003";
 const USE_PYTHON_OMR = process.env.USE_PYTHON_OMR !== "false"; // Ativado por padrão
+const USE_PYTHON_TRI = process.env.USE_PYTHON_TRI !== "false"; // Ativado por padrão
 
 /**
  * Chama o serviço Python OMR para processar uma imagem
@@ -88,6 +90,66 @@ async function checkPythonOMRService(): Promise<boolean> {
     return response.ok;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Verifica se o serviço Python TRI V2 está disponível
+ */
+async function checkPythonTRIService(): Promise<boolean> {
+  try {
+    const response = await fetch(`${PYTHON_TRI_SERVICE_URL}/health`, {
+      method: "GET",
+      signal: AbortSignal.timeout(3000), // 3 segundos timeout
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Chama o serviço Python TRI V2 para calcular TRI com coerência pedagógica
+ */
+async function callPythonTRI(
+  alunos: Array<Record<string, any>>,
+  gabarito: Record<string, string>,
+  areasConfig?: Record<string, [number, number]>
+): Promise<{
+  status: string;
+  total_alunos?: number;
+  prova_analysis?: any;
+  resultados?: Array<any>;
+  mensagem?: string;
+}> {
+  try {
+    const axios = (await import("axios")).default;
+    
+    const response = await axios.post(
+      `${PYTHON_TRI_SERVICE_URL}/api/calcular-tri`,
+      {
+        alunos,
+        gabarito,
+        areas_config: areasConfig || {
+          'LC': [1, 45],
+          'CH': [46, 90],
+          'CN': [1, 45],
+          'MT': [46, 90]
+        }
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 30000, // 30s timeout
+      }
+    );
+    
+    return response.data;
+  } catch (error: any) {
+    console.error("[TRI SERVICE] Erro ao chamar serviço Python TRI:", error.message);
+    return {
+      status: "erro",
+      mensagem: error.response?.data?.mensagem || error.message
+    };
   }
 }
 
@@ -1238,6 +1300,84 @@ export async function registerRoutes(
       res.status(500).json({ 
         error: "Erro ao gerar overlay de debug",
         details: error instanceof Error ? error.message : "Erro desconhecido"
+      });
+    }
+  });
+
+  // Endpoint TRI V2 - Status/Info (GET)
+  app.get("/api/calculate-tri-v2", async (req: Request, res: Response) => {
+    try {
+      const triAvailable = await checkPythonTRIService();
+      res.json({
+        endpoint: "POST /api/calculate-tri-v2",
+        description: "Cálculo TRI V2 com Coerência Pedagógica",
+        service_status: triAvailable ? "online" : "offline",
+        service_url: PYTHON_TRI_SERVICE_URL,
+        version: "2.0.0",
+        algorithm: "Coerência Pedagógica com Análise Estatística",
+        usage: {
+          method: "POST",
+          body: {
+            alunos: "[{nome: string, q1: string, q2: string, ...}]",
+            gabarito: "{1: 'A', 2: 'B', ...}",
+            areas_config: "{CH: [1, 45], CN: [46, 90], ...} (opcional)"
+          },
+          example: `curl -X POST ${PYTHON_TRI_SERVICE_URL}/api/calcular-tri -H "Content-Type: application/json" -d '{"alunos": [...], "gabarito": {...}}'`
+        },
+        features: [
+          "Análise de coerência pedagógica",
+          "Detecção de padrão inverso (acerta difíceis, erra fáceis)",
+          "Ajustes por concordância prova-aluno",
+          "Penalidades por inconsistência (-60 pts)",
+          "Range TRI: 300-900 pontos"
+        ]
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Endpoint TRI V2 - Coerência Pedagógica (Python Service)
+  app.post("/api/calculate-tri-v2", async (req: Request, res: Response) => {
+    try {
+      const { alunos, gabarito, areas_config } = req.body;
+
+      // Validar entrada
+      if (!alunos || !Array.isArray(alunos) || alunos.length === 0) {
+        res.status(400).json({ error: "Lista de alunos vazia ou inválida" });
+        return;
+      }
+
+      if (!gabarito || typeof gabarito !== 'object') {
+        res.status(400).json({ error: "Gabarito não fornecido ou inválido" });
+        return;
+      }
+
+      // Verificar se serviço Python TRI está online
+      const triAvailable = await checkPythonTRIService();
+      if (!triAvailable) {
+        res.status(503).json({ 
+          error: "Serviço TRI V2 offline",
+          details: `O serviço Python TRI não está respondendo em ${PYTHON_TRI_SERVICE_URL}`,
+          fallback: "Use /api/calculate-tri para o algoritmo TRI V1 (lookup table)"
+        });
+        return;
+      }
+
+      // Chamar serviço Python TRI V2
+      console.log(`[TRI V2] Chamando serviço Python com ${alunos.length} alunos...`);
+      const resultado = await callPythonTRI(alunos, gabarito, areas_config);
+
+      console.log(`[TRI V2] Sucesso: ${resultado.total_alunos} alunos processados`);
+      res.json(resultado);
+
+    } catch (error: any) {
+      console.error("[TRI V2] Erro ao calcular TRI V2:", error);
+      res.status(500).json({
+        error: "Erro ao calcular TRI V2",
+        details: error.message || "Erro desconhecido",
+        stack: error.stack,
+        fallback: "Use /api/calculate-tri para o algoritmo TRI V1 (lookup table)"
       });
     }
   });
